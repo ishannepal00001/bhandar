@@ -76,3 +76,14 @@ export function findValidOtp(
       .executeTakeFirst(),
   );
 }
+
+// Returns false when the OTP was already gone, e.g. used by a concurrent login.
+export function deleteOtp(id: number): Promise<boolean> {
+  return query("Failed to delete OTP", async () => {
+    const result = await db
+      .deleteFrom("otp")
+      .where("id", "=", id)
+      .executeTakeFirst();
+    return result.numDeletedRows > 0n;
+  });
+}

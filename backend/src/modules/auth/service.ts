@@ -55,5 +55,8 @@ export async function sendOtp(input: SendOtpRequest): Promise<SendOtpResult> {
 export async function login(input: LoginRequest): Promise<LoginResult> {
   const otp = await fromModel(() => authModel.findValidOtp(input.code, new Date().toISOString()))
   if (!otp) throw new AuthServiceError('Invalid code', 'INVALID_CODE')
+
+  const deleted = await fromModel(() => authModel.deleteOtp(otp.id))
+  if (!deleted) throw new AuthServiceError('Invalid code', 'INVALID_CODE')
   return { authenticated: true }
 }
