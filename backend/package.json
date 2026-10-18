@@ -5,6 +5,7 @@
   "scripts": {
     "dev": "bun --watch src/index.ts",
     "start": "bun src/index.ts",
+    "seed": "bun src/seed.ts",
     "test": "bun test",
     "typecheck": "tsc --noEmit"
   },
@@ -12,10 +13,12 @@
     "hono": "^4.13.13",
     "kysely": "^0.28",
     "kysely-bun-sqlite": "^0.4.0",
+    "nodemailer": "^10.1.6",
     "zod": "^4.6.7"
   },
   "devDependencies": {
     "@types/bun": "^1.4.3",
+    "@types/nodemailer": "^8.0.2",
     "typescript": "~6.0.2"
   }
 }
