@@ -1,5 +1,6 @@
 // auth: helpers
 import { randomInt } from 'node:crypto'
+import { sign } from 'hono/jwt'
 import nodemailer from 'nodemailer'
 import { config } from '../../../config'
 
@@ -35,5 +36,35 @@ export async function sendOtpMail(to: string, code: string): Promise<void> {
     })
   } catch (err) {
     throw new AuthUtilsError('Failed to send OTP mail', { cause: err })
+  }
+}
+
+// bcrypt hashing for passwords and OTPs.
+export function hashSecret(secret: string): Promise<string> {
+  return Bun.password.hash(secret, { algorithm: 'bcrypt', cost: config.bcrypt.cost })
+}
+
+// A hash that isn't bcrypt (e.g. stored before the switch) counts as a mismatch.
+export async function verifySecret(secret: string, hash: string): Promise<boolean> {
+  try {
+    return await Bun.password.verify(secret, hash, 'bcrypt')
+  } catch {
+    return false
+  }
+}
+
+export function tokenTtlSeconds(): number {
+  return config.jwt.ttlDays * 24 * 60 * 60
+}
+
+export async function signToken(userId: number, name: string): Promise<string> {
+  const { secret, algorithm } = config.jwt
+  if (!secret) throw new AuthUtilsError('JWT secret is not configured')
+
+  const now = Math.floor(Date.now() / 1000)
+  try {
+    return await sign({ sub: String(userId), name, iat: now, exp: now + tokenTtlSeconds() }, secret, algorithm)
+  } catch (err) {
+    throw new AuthUtilsError('Failed to sign token', { cause: err })
   }
 }

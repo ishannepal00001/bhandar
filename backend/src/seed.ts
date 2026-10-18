@@ -3,6 +3,7 @@ import { config } from '../config'
 import { sendOtpRequestSchema } from '../schemas/auth'
 import { migrate } from './db'
 import { upsertUser } from './modules/auth/model'
+import { hashSecret } from './modules/auth/utils'
 
 const { name, email } = config.seed
 const parsed = sendOtpRequestSchema.safeParse({ password: config.seed.password })
@@ -17,6 +18,6 @@ await migrate()
 await upsertUser({
   name,
   email,
-  password: await Bun.password.hash(parsed.data.password),
+  password: await hashSecret(parsed.data.password),
 })
 console.log(`Seeded user ${name} <${email}>`)

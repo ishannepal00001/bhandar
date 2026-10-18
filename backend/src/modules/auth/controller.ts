@@ -20,6 +20,7 @@ const statusByKind: Record<AuthServiceErrorKind, AuthControllerError['status']> 
   INVALID_CODE: 401,
   INVALID_PASSWORD: 401,
   MAIL_ERROR: 502,
+  TOKEN_ERROR: 500,
   DB_ERROR: 500,
 }
 

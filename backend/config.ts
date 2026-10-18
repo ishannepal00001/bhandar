@@ -13,6 +13,19 @@ export const config = {
   password: {
     minLength: 8,
   },
+  bcrypt: {
+    cost: 12,
+  },
+  jwt: {
+    secret: env.JWT_SECRET,
+    algorithm: 'HS256' as const,
+    ttlDays: 7,
+  },
+  cookie: {
+    name: 'bhandar_token',
+    secure: env.NODE_ENV === 'production',
+    sameSite: 'Strict' as const,
+  },
   mail: {
     host: env.SMTP_HOST,
     port: Number(env.SMTP_PORT ?? 465),

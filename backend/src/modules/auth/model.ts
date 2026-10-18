@@ -21,6 +21,7 @@ export interface UsersTable {
 export interface OtpTable {
   id: Generated<number>;
   user_id: number;
+  // bcrypt hash, never the plain code.
   code: string;
   expires_at: string;
   created_at: Generated<string>;
@@ -40,6 +41,12 @@ async function query<T>(message: string, run: () => Promise<T>): Promise<T> {
 export function listUsers(): Promise<User[]> {
   return query("Failed to list users", () =>
     db.selectFrom("users").selectAll().execute(),
+  );
+}
+
+export function findUserById(id: number): Promise<User | undefined> {
+  return query("Failed to look up user", () =>
+    db.selectFrom("users").selectAll().where("id", "=", id).executeTakeFirst(),
   );
 }
 
@@ -63,17 +70,13 @@ export function createOtp(otp: Insertable<OtpTable>): Promise<void> {
   });
 }
 
-export function findValidOtp(
-  code: string,
-  now: string,
-): Promise<Otp | undefined> {
-  return query("Failed to look up OTP", () =>
+export function listValidOtps(now: string): Promise<Otp[]> {
+  return query("Failed to look up OTPs", () =>
     db
       .selectFrom("otp")
       .selectAll()
-      .where("code", "=", code)
       .where("expires_at", ">", now)
-      .executeTakeFirst(),
+      .execute(),
   );
 }
 
