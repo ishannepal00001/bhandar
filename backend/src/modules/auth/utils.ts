@@ -1,6 +1,6 @@
 // auth: helpers
 import { randomInt } from 'node:crypto'
-import { sign } from 'hono/jwt'
+import { sign, verify } from 'hono/jwt'
 import nodemailer from 'nodemailer'
 import { config } from '../../../config'
 
@@ -66,5 +66,25 @@ export async function signToken(userId: number, name: string): Promise<string> {
     return await sign({ sub: String(userId), name, iat: now, exp: now + tokenTtlSeconds() }, secret, algorithm)
   } catch (err) {
     throw new AuthUtilsError('Failed to sign token', { cause: err })
+  }
+}
+
+export type TokenUser = {
+  id: number
+  name: string
+}
+
+// Returns undefined for a bad, tampered or expired token; throws only when the secret is missing.
+export async function verifyToken(token: string): Promise<TokenUser | undefined> {
+  const { secret, algorithm } = config.jwt
+  if (!secret) throw new AuthUtilsError('JWT secret is not configured')
+
+  try {
+    const payload = await verify(token, secret, algorithm)
+    const id = Number(payload.sub)
+    if (!Number.isInteger(id) || typeof payload.name !== 'string') return undefined
+    return { id, name: payload.name }
+  } catch {
+    return undefined
   }
 }

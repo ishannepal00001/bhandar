@@ -49,3 +49,5 @@ authRouter.post('/login', async (c) => {
   setCookie(c, name, result.token, { httpOnly: true, secure, sameSite, path: '/', maxAge: tokenTtlSeconds() })
   return c.json(result)
 })
+
+authRouter.post('/logout', (c) => c.json(authController.logout(c)))

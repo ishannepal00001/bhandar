@@ -1,9 +1,12 @@
 // auth: request handling, validated against schema
+import type { Context } from 'hono'
+import { deleteCookie } from 'hono/cookie'
 import { z } from 'zod'
+import { config } from '../../../config'
 import { loginRequestSchema, sendOtpRequestSchema } from '../../../schemas/auth'
 import * as authService from './service'
 import { AuthServiceError } from './service'
-import type { AuthServiceErrorKind, LoginResult, SendOtpResult } from './type'
+import type { AuthServiceErrorKind, LoginResult, LogoutResult, SendOtpResult } from './type'
 
 export class AuthControllerError extends Error {
   constructor(
@@ -49,4 +52,11 @@ export async function sendOtp(body: unknown): Promise<SendOtpResult> {
 export async function login(body: unknown): Promise<LoginResult> {
   const input = parse(loginRequestSchema, body)
   return fromService(() => authService.login(input))
+}
+
+// Stops at the controller: clears the auth cookie, no service or db involved.
+export function logout(c: Context): LogoutResult {
+  const { name, secure, sameSite } = config.cookie
+  deleteCookie(c, name, { httpOnly: true, secure, sameSite, path: '/' })
+  return { loggedOut: true }
 }

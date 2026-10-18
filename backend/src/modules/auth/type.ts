@@ -3,6 +3,10 @@ export type LoginResult = {
   token: string
 }
 
+export type LogoutResult = {
+  loggedOut: true
+}
+
 export type SendOtpResult = {
   sent: true
 }
