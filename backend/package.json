@@ -9,8 +9,9 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
-    "@hono/zod-validator": "^0.9.1",
     "hono": "^4.13.13",
+    "kysely": "^0.28",
+    "kysely-bun-sqlite": "^0.4.0",
     "zod": "^4.6.7"
   },
   "devDependencies": {
