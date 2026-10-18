@@ -1,15 +1,17 @@
 import {
   createRootRoute,
   createRouter,
-  Outlet,
   RouterProvider,
 } from '@tanstack/react-router'
+import Layout from './Layout'
+import { Dashboard } from './routes/Dashboard'
+import { Downloads } from './routes/Downloads'
 
-const rootRoute = createRootRoute({
-  component: () => <Outlet />,
+export const rootRoute = createRootRoute({
+  component: Layout,
 })
 
-const routeTree = rootRoute.addChildren([])
+const routeTree = rootRoute.addChildren([Dashboard, Downloads])
 
 const router = createRouter({ routeTree })
 

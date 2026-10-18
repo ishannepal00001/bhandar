@@ -23,6 +23,15 @@ export default {
           muted: "#3A4A66",      // borders, ghosted details (replaces mist)
         },
       },
+      keyframes: {
+        marquee: {
+          from: { transform: "translateX(0)" },
+          to: { transform: "translateX(calc(-50% - 0.5rem))" },
+        },
+      },
+      animation: {
+        marquee: "marquee 40s linear infinite",
+      },
     },
   },
   plugins: [],

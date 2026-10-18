@@ -23,7 +23,13 @@ async function run(id: string) {
     if (err instanceof CancelledError) {
       setStatus(id, { status: 'cancelled', speed: null, eta: null })
     } else {
-      const message = err instanceof Error ? err.message : String(err)
+      // B2 errors arrive as XML text, so undo its entity escaping.
+      const message = (err instanceof Error ? err.message : String(err))
+        .replace(/&apos;/g, "'")
+        .replace(/&quot;/g, '"')
+        .replace(/&lt;/g, '<')
+        .replace(/&gt;/g, '>')
+        .replace(/&amp;/g, '&')
       console.error(`Download ${id} failed:`, message)
       setStatus(id, { status: 'failed', error: message.slice(0, 2000), speed: null, eta: null })
     }
