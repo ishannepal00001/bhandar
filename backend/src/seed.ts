@@ -1,6 +1,6 @@
 // Seeds the user named in config.seed. Set SEED_EMAIL and SEED_PASSWORD in .env, then: bun run seed
 import { config } from '../config'
-import { sendOtpRequestSchema } from '../schemas/auth'
+import { sendOtpRequestSchema } from '../../schemas/auth'
 import { migrate } from './db'
 import { upsertUser } from './modules/auth/model'
 import { hashSecret } from './modules/auth/utils'

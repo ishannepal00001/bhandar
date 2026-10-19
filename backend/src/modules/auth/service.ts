@@ -1,6 +1,6 @@
 // auth: business logic
 import { config } from '../../../config'
-import type { LoginRequest, SendOtpRequest } from '../../../schemas/auth'
+import type { LoginRequest, SendOtpRequest } from '../../../../schemas/auth'
 import * as authModel from './model'
 import { AuthModelError } from './model'
 import type { AuthServiceErrorKind, LoginResult, SendOtpResult } from './type'

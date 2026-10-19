@@ -1,5 +1,5 @@
 import { z } from 'zod'
-import { config } from '../config'
+import { config } from '../backend/config'
 
 const { minLength } = config.password
 const { length: otpLength } = config.otp

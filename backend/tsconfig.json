@@ -10,7 +10,8 @@
     "skipLibCheck": true,
     "verbatimModuleSyntax": true,
     "noUnusedLocals": true,
-    "noUnusedParameters": true
+    "noUnusedParameters": true,
+    "paths": { "zod": ["./node_modules/zod"] }
   },
-  "include": ["src", "schemas", "config.ts"]
+  "include": ["src", "../schemas", "config.ts"]
 }
