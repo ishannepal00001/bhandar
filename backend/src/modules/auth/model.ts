@@ -13,16 +13,17 @@ export interface UsersTable {
   id: Generated<number>;
   name: string;
   email: string;
-  // Bun.password hash, never the plain password.
+  // SHA-256 of "<salt>:<password>", never the plain password.
   password: string;
+  password_salt: string;
   created_at: Generated<string>;
 }
 
 export interface OtpTable {
   id: Generated<number>;
   user_id: number;
-  // bcrypt hash, never the plain code.
-  code: string;
+  // SHA-256 of the code, never the plain code.
+  code_hash: string;
   expires_at: string;
   created_at: Generated<string>;
 }
@@ -58,7 +59,11 @@ export function upsertUser(user: Insertable<UsersTable>): Promise<void> {
       .onConflict((oc) =>
         oc
           .column("name")
-          .doUpdateSet({ email: user.email, password: user.password }),
+          .doUpdateSet({
+            email: user.email,
+            password: user.password,
+            password_salt: user.password_salt,
+          }),
       )
       .execute();
   });
@@ -70,13 +75,17 @@ export function createOtp(otp: Insertable<OtpTable>): Promise<void> {
   });
 }
 
-export function listValidOtps(now: string): Promise<Otp[]> {
-  return query("Failed to look up OTPs", () =>
+export function findValidOtp(
+  codeHash: string,
+  now: string,
+): Promise<Otp | undefined> {
+  return query("Failed to look up OTP", () =>
     db
       .selectFrom("otp")
       .selectAll()
+      .where("code_hash", "=", codeHash)
       .where("expires_at", ">", now)
-      .execute(),
+      .executeTakeFirst(),
   );
 }
 

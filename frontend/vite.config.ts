@@ -7,7 +7,7 @@ export default defineConfig({
   server: {
     // Forward API calls to the Bun backend during development.
     proxy: {
-      '/api': 'http://127.0.0.1:3000',
+      '/api': 'http://127.0.0.1:8787',
     },
   },
 })

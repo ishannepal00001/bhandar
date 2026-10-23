@@ -1,0 +1,8 @@
+# Local values for the secrets named in wrangler.jsonc (secrets.required). Copy to .dev.vars.
+# When deployed, set each with: bunx wrangler secret put <NAME>
+
+# Signs login JWTs; use a long random string, e.g. `openssl rand -base64 48`
+JWT_SECRET=
+
+# Password for SMTP_USER (set SMTP_HOST, SMTP_PORT, SMTP_USER and MAIL_FROM in wrangler.jsonc vars)
+SMTP_PASS=

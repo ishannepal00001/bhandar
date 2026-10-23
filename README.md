@@ -2,13 +2,13 @@
 
 A personal Facebook video downloader. Paste a link, pick a quality, and Bhandar downloads the video with `yt-dlp`, stores it in Backblaze B2 and keeps a searchable history. Only the owner can get in: login takes a password and a one-time code sent by email.
 
-> **Status:** the backend is being rebuilt module by module. The auth module (OTP login, JWT cookie, logout) is done. The downloads module is scaffolded but empty for now; the earlier working downloader is kept in `backend/legacy/` for reference. The frontend still renders dummy data.
+> **Status:** the backend is being rebuilt module by module. The auth module (OTP login, JWT cookie, logout, IP rate limits) is done and runs on Cloudflare Workers. The downloads module is scaffolded but empty for now; the earlier working downloader is kept in `backend/legacy/` for reference, and `yt-dlp` will move to a separate Python service. The frontend still renders dummy data.
 
 ## Stack
 
 | Part | Tech |
 |---|---|
-| Backend | [Bun](https://bun.sh), [Hono](https://hono.dev), [Kysely](https://kysely.dev) on SQLite, Zod, Nodemailer |
+| Backend | [Hono](https://hono.dev) on [Cloudflare Workers](https://developers.cloudflare.com/workers/), [Kysely](https://kysely.dev) on D1, Zod, Nodemailer (`nodejs_compat`) |
 | Frontend | React 19, Vite, TanStack Router, Zustand, Tailwind CSS, lucide-react |
 | Shared | Zod request schemas in `schemas/`, used by the backend (and later the frontend) |
 | External | `yt-dlp` + `ffmpeg` for downloads, Backblaze B2 for storage, an SMTP server for login codes |
@@ -19,11 +19,13 @@ A personal Facebook video downloader. Paste a link, pick a quality, and Bhandar 
 bhandar/
 ├── schemas/              Zod request schemas shared by backend and frontend
 ├── backend/
+│   ├── wrangler.jsonc    Worker config: vars, secret names, D1, rate limits
 │   ├── config.ts         every constant and env read lives here
+│   ├── migrations/       D1 schema, applied with wrangler
+│   ├── scripts/seed.ts   creates the login user in D1
 │   ├── src/
 │   │   ├── index.ts      Hono app, mounts the api/v1 routers, error handling
-│   │   ├── db.ts         Kysely + bun:sqlite, table migrations
-│   │   ├── seed.ts       creates the login user
+│   │   ├── db.ts         Kysely on the BHANDAR_DB D1 binding
 │   │   ├── api/v1/       routes: parse the request, return JSON
 │   │   ├── modules/<name>/
 │   │   │   ├── controller.ts   validation against schemas/
@@ -31,7 +33,9 @@ bhandar/
 │   │   │   ├── model.ts        database access
 │   │   │   ├── utils.ts        helpers (hashing, JWT, mail, ...)
 │   │   │   └── type.ts         shared types
-│   │   └── utils/middlewares/isUser.ts   guards routes with the auth cookie
+│   │   └── utils/middlewares/
+│   │       ├── isUser.ts       guards routes with the auth cookie
+│   │       └── rateLimit.ts    per-IP limits from the ratelimits bindings
 │   └── legacy/           previous downloader implementation, not mounted
 └── frontend/
     └── src/              pages, routes, components, stores
@@ -43,7 +47,8 @@ Each layer has its own error class (`AuthModelError` → `AuthServiceError` → 
 
 ### Requirements
 
-- Bun 1.3+
+- Bun 1.3+ (package manager and seed script; the API runs on Workers via Wrangler)
+- A Cloudflare account for deploying
 - An SMTP account for sending login codes
 - For downloads: `yt-dlp` and `ffmpeg` on your `PATH`, and a private Backblaze B2 bucket with an application key
 
@@ -52,9 +57,11 @@ Each layer has its own error class (`AuthModelError` → `AuthServiceError` → 
 ```sh
 cd backend
 bun install
-cp .env.example .env     # fill in the values, see below
-bun run seed             # creates the login user from SEED_EMAIL / SEED_PASSWORD
-bun run dev              # http://127.0.0.1:3000
+cp .dev.vars.example .dev.vars   # local secret values
+cp .env.example .env             # SEED_EMAIL / SEED_PASSWORD for the seed script
+bun run db:migrate:local         # creates the tables in the local D1 database
+bun run seed:local               # creates the login user
+bun run dev                      # http://127.0.0.1:8787
 ```
 
 ### Frontend
@@ -62,29 +69,29 @@ bun run dev              # http://127.0.0.1:3000
 ```sh
 cd frontend
 bun install
-bun run dev              # Vite dev server; /api is proxied to the backend on :3000
+bun run dev              # Vite dev server; /api is proxied to the backend on :8787
 ```
 
 ## Configuration
 
-Tunable values (OTP length and lifetime, bcrypt cost, JWT lifetime, cookie name, ...) are in `backend/config.ts`. Secrets and machine-specific values come from `backend/.env`:
+Fixed rules (OTP length, password length, JWT algorithm, cookie SameSite) are constants in `backend/config.ts`. Everything else is in `backend/wrangler.jsonc` and reaches `config.ts` through `process.env`:
 
-| Variable | Purpose |
-|---|---|
-| `PORT` | Port the API listens on (default `3000`) |
-| `DATA_DIR` | Folder for the SQLite database (default `./data`) |
-| `JWT_SECRET` | Signs login tokens. Use a long random string, e.g. `openssl rand -base64 48` |
-| `SMTP_HOST`, `SMTP_PORT`, `SMTP_USER`, `SMTP_PASS` | SMTP server for login codes (port `465` uses TLS) |
-| `MAIL_FROM` | Sender address on the login email |
-| `SEED_EMAIL`, `SEED_PASSWORD` | Used by `bun run seed` to create the user |
-| `B2_KEY_ID`, `B2_APP_KEY`, `B2_BUCKET`, `B2_ENDPOINT`, `B2_REGION` | Backblaze B2 storage, for the downloads module |
-| `MAX_CONCURRENT` | How many downloads run at once, for the downloads module |
+| Where | Keys | Purpose |
+|---|---|---|
+| `vars` | `OTP_TTL_MINUTES`, `JWT_TTL_DAYS` | How long a login code and a login last |
+| `vars` | `COOKIE_NAME`, `COOKIE_SECURE` | The auth cookie |
+| `vars` | `SMTP_HOST`, `SMTP_PORT`, `SMTP_USER`, `MAIL_FROM` | SMTP server for login codes (port `465` uses TLS) |
+| `secrets.required` | `JWT_SECRET`, `SMTP_PASS` | Names only. Values go in `.dev.vars` locally and `bunx wrangler secret put <NAME>` when deployed; `wrangler deploy` fails if one is missing |
+| `d1_databases` | `BHANDAR_DB` → `bhandardb` | The database. Run `bunx wrangler d1 create bhandardb` once and put the printed id in `database_id` |
+| `ratelimits` | `SEND_OTP_LIMITER` 3/min, `LOGIN_LIMITER` 5/min, `API_LIMITER` 60/10s | Per-IP limits. Cloudflare counts them per location and approximately |
+
+`backend/.env` is only read by the seed script (`SEED_EMAIL`, `SEED_PASSWORD`).
 
 Passwords must be at least 8 characters and include an uppercase letter, a lowercase letter, a number and a symbol.
 
 ## How login works
 
-1. `POST /api/v1/auth/send-otp` with the password. If it matches a user, a 6-digit code is emailed to that user. The code is stored bcrypt-hashed and expires after 10 minutes.
+1. `POST /api/v1/auth/send-otp` with the password. If it matches a user, a 6-digit code is emailed to that user. The code is stored as a SHA-256 hash and expires after 10 minutes. Passwords are stored as a salted SHA-256 hash.
 2. `POST /api/v1/auth/login` with the code. A valid code is used up, and the response sets an `httpOnly` `bhandar_token` cookie holding a JWT valid for 7 days.
 3. Protected routes use the `isUser` middleware, which checks the cookie and puts the user on `c.var.user`.
 4. `POST /api/v1/auth/logout` clears the cookie.
@@ -102,6 +109,7 @@ All routes are under `/api/v1`. Errors come back as `{ "error": "...", "issues"?
 | Status | Meaning |
 |---|---|
 | 400 | Body is not JSON or fails validation |
+| 429 | Too many requests from this IP |
 | 401 | Wrong password, wrong or expired code, or not logged in |
 | 502 | The login email could not be sent |
 | 500 | Database or token error |
@@ -110,9 +118,11 @@ All routes are under `/api/v1`. Errors come back as `{ "error": "...", "issues"?
 
 | Where | Command | Does |
 |---|---|---|
-| backend | `bun run dev` | Start the API and restart on changes |
-| backend | `bun run start` | Start the API |
-| backend | `bun run seed` | Create or update the login user |
+| backend | `bun run dev` | Start the API locally with `wrangler dev` |
+| backend | `bun run deploy` | Deploy the Worker |
+| backend | `bun run cf-typegen` | Regenerate binding types after changing `wrangler.jsonc` |
+| backend | `bun run db:migrate:local` / `:remote` | Apply `migrations/` to D1 |
+| backend | `bun run seed:local` / `:remote` | Create or update the login user |
 | backend | `bun test` | Run tests |
 | backend | `bun run typecheck` | Type-check with `tsc` |
 | frontend | `bun run dev` | Start the Vite dev server |

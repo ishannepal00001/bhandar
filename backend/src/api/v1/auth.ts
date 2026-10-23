@@ -7,6 +7,7 @@ import { config } from '../../../config'
 import * as authController from '../../modules/auth/controller'
 import { AuthControllerError } from '../../modules/auth/controller'
 import { tokenTtlSeconds } from '../../modules/auth/utils'
+import { rateLimit } from '../../utils/middlewares/rateLimit'
 
 export class AuthRouteError extends Error {
   constructor(
@@ -36,12 +37,12 @@ async function fromController<T>(run: () => Promise<T>): Promise<T> {
 
 export const authRouter = new Hono()
 
-authRouter.post('/send-otp', async (c) => {
+authRouter.post('/send-otp', rateLimit((env) => env.SEND_OTP_LIMITER), async (c) => {
   const body = await readJson(c)
   return c.json(await fromController(() => authController.sendOtp(body)))
 })
 
-authRouter.post('/login', async (c) => {
+authRouter.post('/login', rateLimit((env) => env.LOGIN_LIMITER), async (c) => {
   const body = await readJson(c)
   const result = await fromController(() => authController.login(body))
 

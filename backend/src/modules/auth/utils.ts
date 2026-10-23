@@ -39,18 +39,28 @@ export async function sendOtpMail(to: string, code: string): Promise<void> {
   }
 }
 
-// bcrypt hashing for passwords and OTPs.
-export function hashSecret(secret: string): Promise<string> {
-  return Bun.password.hash(secret, { algorithm: 'bcrypt', cost: config.bcrypt.cost })
+// SHA-256 with Web Crypto, which Workers and Bun both provide.
+function bytesToHex(bytes: ArrayBuffer): string {
+  return [...new Uint8Array(bytes)].map((b) => b.toString(16).padStart(2, '0')).join('')
 }
 
-// A hash that isn't bcrypt (e.g. stored before the switch) counts as a mismatch.
-export async function verifySecret(secret: string, hash: string): Promise<boolean> {
-  try {
-    return await Bun.password.verify(secret, hash, 'bcrypt')
-  } catch {
-    return false
-  }
+async function sha256Hex(input: string): Promise<string> {
+  return bytesToHex(await crypto.subtle.digest('SHA-256', new TextEncoder().encode(input)))
+}
+
+// SHA-256(salt + password) with a random salt.
+export async function hashPassword(password: string): Promise<{ hash: string; salt: string }> {
+  const salt = bytesToHex(crypto.getRandomValues(new Uint8Array(config.password.saltBytes)).buffer)
+  return { hash: await sha256Hex(`${salt}:${password}`), salt }
+}
+
+export async function verifyPassword(password: string, salt: string, expectedHash: string): Promise<boolean> {
+  return (await sha256Hex(`${salt}:${password}`)) === expectedHash
+}
+
+// Unsalted so a code can be looked up by its hash; codes are single use and short-lived.
+export function hashCode(code: string): Promise<string> {
+  return sha256Hex(code)
 }
 
 export function tokenTtlSeconds(): number {

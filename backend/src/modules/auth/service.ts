@@ -4,7 +4,7 @@ import type { LoginRequest, SendOtpRequest } from '../../../../schemas/auth'
 import * as authModel from './model'
 import { AuthModelError } from './model'
 import type { AuthServiceErrorKind, LoginResult, SendOtpResult } from './type'
-import { AuthUtilsError, generateOtp, hashSecret, sendOtpMail, signToken, verifySecret } from './utils'
+import { AuthUtilsError, generateOtp, hashCode, sendOtpMail, signToken, verifyPassword } from './utils'
 
 export class AuthServiceError extends Error {
   constructor(
@@ -31,7 +31,7 @@ export async function sendOtp(input: SendOtpRequest): Promise<SendOtpResult> {
 
   let user: authModel.User | undefined
   for (const candidate of users) {
-    if (await verifySecret(input.password, candidate.password)) {
+    if (await verifyPassword(input.password, candidate.password_salt, candidate.password)) {
       user = candidate
       break
     }
@@ -40,8 +40,8 @@ export async function sendOtp(input: SendOtpRequest): Promise<SendOtpResult> {
 
   const code = generateOtp()
   const expiresAt = new Date(Date.now() + config.otp.ttlMinutes * 60_000).toISOString()
-  const codeHash = await hashSecret(code)
-  await fromModel(() => authModel.createOtp({ user_id: user.id, code: codeHash, expires_at: expiresAt }))
+  const codeHash = await hashCode(code)
+  await fromModel(() => authModel.createOtp({ user_id: user.id, code_hash: codeHash, expires_at: expiresAt }))
 
   try {
     await sendOtpMail(user.email, code)
@@ -54,15 +54,8 @@ export async function sendOtp(input: SendOtpRequest): Promise<SendOtpResult> {
 }
 
 export async function login(input: LoginRequest): Promise<LoginResult> {
-  const otps = await fromModel(() => authModel.listValidOtps(new Date().toISOString()))
-
-  let otp: authModel.Otp | undefined
-  for (const candidate of otps) {
-    if (await verifySecret(input.code, candidate.code)) {
-      otp = candidate
-      break
-    }
-  }
+  const codeHash = await hashCode(input.code)
+  const otp = await fromModel(() => authModel.findValidOtp(codeHash, new Date().toISOString()))
   if (!otp) throw new AuthServiceError('Invalid code', 'INVALID_CODE')
 
   const user = await fromModel(() => authModel.findUserById(otp.user_id))

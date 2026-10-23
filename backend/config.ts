@@ -1,29 +1,27 @@
-// Every tunable value lives here. Machine-specific and secret ones come from .env.
+// Every tunable value lives here. On Workers, process.env holds the vars and secrets from wrangler.jsonc;
+// the seed script runs under Bun and reads backend/.env.
 const env = process.env
 
 export const config = {
   db: {
-    dataDir: env.DATA_DIR ?? './data',
-    fileName: 'bhandar.db',
+    name: 'bhandardb',
   },
   otp: {
     length: 6,
-    ttlMinutes: 10,
+    ttlMinutes: Number(env.OTP_TTL_MINUTES ?? 10),
   },
   password: {
     minLength: 8,
-  },
-  bcrypt: {
-    cost: 12,
+    saltBytes: 16,
   },
   jwt: {
     secret: env.JWT_SECRET,
     algorithm: 'HS256' as const,
-    ttlDays: 7,
+    ttlDays: Number(env.JWT_TTL_DAYS ?? 7),
   },
   cookie: {
-    name: 'bhandar_token',
-    secure: env.NODE_ENV === 'production',
+    name: env.COOKIE_NAME ?? 'bhandar_token',
+    secure: env.COOKIE_SECURE === 'true',
     sameSite: 'Strict' as const,
   },
   mail: {
