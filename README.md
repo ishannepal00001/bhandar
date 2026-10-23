@@ -106,6 +106,8 @@ All routes are under `/api/v1`. Errors come back as `{ "error": "...", "issues"?
 | POST | `/auth/login` | `{ "code": "123456" }` | `{ "token": string }` + auth cookie |
 | POST | `/auth/logout` | none | `{ "loggedOut": true }` |
 
+`GET /health` (outside `/api`, not rate limited) returns `{ "status": "ok", "db": "ok" }`, or `503` with `"db": "unreachable"` when D1 can't be queried.
+
 | Status | Meaning |
 |---|---|
 | 400 | Body is not JSON or fails validation |
