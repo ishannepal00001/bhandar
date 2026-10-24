@@ -7,8 +7,8 @@ import {
   type LucideIcon,
 } from 'lucide-react'
 import CurrentProgress from '../components/Dashboard/CurrentProgress'
+import HeaderActions from '../components/HeaderActions'
 import Marquee from '../components/Marquee'
-import SearchBar from '../components/SearchBar'
 import { current, recent, stats } from '../dummydata'
 
 const statIcons: Record<string, LucideIcon> = {
@@ -32,7 +32,7 @@ function Dashboard() {
               An overview of your Facebook video downloads.
             </p>
           </div>
-          <SearchBar />
+          <HeaderActions />
         </div>
 
         <section className="flex flex-col gap-3 sm:grid sm:grid-cols-2 sm:gap-4 lg:grid-cols-4">

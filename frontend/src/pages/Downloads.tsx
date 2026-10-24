@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import DownloadForm from '../components/Downloads/DownloadForm'
 import DownloadQueue from '../components/Downloads/DownloadQueue'
-import SearchBar from '../components/SearchBar'
+import HeaderActions from '../components/HeaderActions'
 import VideoCard from '../components/VideoCard'
 import { queue, recent } from '../dummydata'
 
@@ -23,7 +23,7 @@ function Downloads() {
               Paste a Facebook link to download it, and manage everything you’ve saved.
             </p>
           </div>
-          <SearchBar />
+          <HeaderActions />
         </div>
 
         <DownloadForm />

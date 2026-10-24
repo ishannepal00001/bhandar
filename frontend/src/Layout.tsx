@@ -1,10 +1,19 @@
-import { Outlet } from '@tanstack/react-router'
+import { Outlet, useRouterState } from '@tanstack/react-router'
 import { Menu } from 'lucide-react'
+import DownloadForm from './components/Downloads/DownloadForm'
+import Modal from './components/Modal'
 import Sidebar from './components/Sidebar'
+import { useDownloadModalStore } from './stores/useDownloadModalStore'
 import { useSidebarStore } from './stores/useSidebarStore'
 
 function Layout() {
   const setMobileOpen = useSidebarStore((state) => state.setMobileOpen)
+  const downloadModalOpen = useDownloadModalStore((state) => state.open)
+  const setDownloadModalOpen = useDownloadModalStore((state) => state.setOpen)
+  const pathname = useRouterState({ select: (state) => state.location.pathname })
+
+  // The auth page stands alone, without the app chrome.
+  if (pathname === '/auth') return <Outlet />
 
   return (
     <div className="flex min-h-screen bg-background text-primary dark:bg-night-background dark:text-night-primary">
@@ -23,6 +32,13 @@ function Layout() {
         </header>
         <Outlet />
       </div>
+      <Modal
+        open={downloadModalOpen}
+        onClose={() => setDownloadModalOpen(false)}
+        title="New download"
+      >
+        <DownloadForm />
+      </Modal>
     </div>
   )
 }

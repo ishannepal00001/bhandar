@@ -28,9 +28,19 @@ export default {
           from: { transform: "translateX(0)" },
           to: { transform: "translateX(calc(-50% - 0.5rem))" },
         },
+        "step-next": {
+          from: { opacity: "0", transform: "translateX(1.5rem)" },
+          to: { opacity: "1", transform: "translateX(0)" },
+        },
+        "step-prev": {
+          from: { opacity: "0", transform: "translateX(-1.5rem)" },
+          to: { opacity: "1", transform: "translateX(0)" },
+        },
       },
       animation: {
         marquee: "marquee 40s linear infinite",
+        "step-next": "step-next 300ms ease-out",
+        "step-prev": "step-prev 300ms ease-out",
       },
     },
   },

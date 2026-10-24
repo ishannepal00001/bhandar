@@ -1,4 +1,4 @@
-import { Gauge, Pause, Timer, X } from 'lucide-react'
+import { Gauge, Inbox, Pause, Timer, X } from 'lucide-react'
 
 type CurrentDownload = {
   title: string
@@ -15,7 +15,21 @@ const muted = 'text-primary/60 dark:text-night-primary/60'
 const iconButton =
   'border border-primary/30 p-2 text-primary/60 hover:border-primary hover:text-primary dark:border-night-primary/30 dark:text-night-primary/60 dark:hover:border-night-primary dark:hover:text-night-primary'
 
-function CurrentProgress({ download }: { download: CurrentDownload }) {
+function CurrentProgress({ download }: { download: CurrentDownload | null }) {
+  if (!download) {
+    return (
+      <section className="flex flex-col items-center justify-center gap-3 border border-dashed border-primary/30 px-5 py-10 text-center dark:border-night-primary/30">
+        <Inbox size={32} strokeWidth={1.5} className={muted} />
+        <div>
+          <p className="font-serif text-lg">Nothing downloading</p>
+          <p className={`mt-1 text-sm ${muted}`}>
+            Videos you start downloading will show their progress here.
+          </p>
+        </div>
+      </section>
+    )
+  }
+
   return (
     <section className="border border-primary/15 dark:border-night-primary/15">
       <div className="flex flex-col gap-5 p-5 sm:flex-row sm:items-center">

@@ -10,6 +10,7 @@ import {
 } from 'lucide-react'
 import { useEffect } from 'react'
 import { useMediaQuery } from '../hooks/useMediaQuery'
+import { useDownloadModalStore } from '../stores/useDownloadModalStore'
 import { useSidebarStore } from '../stores/useSidebarStore'
 
 const links = [
@@ -34,6 +35,7 @@ function Sidebar() {
   const toggle = useSidebarStore((state) => state.toggle)
   const mobileOpen = useSidebarStore((state) => state.mobileOpen)
   const setMobileOpen = useSidebarStore((state) => state.setMobileOpen)
+  const openDownloadModal = useDownloadModalStore((state) => state.setOpen)
   const isDesktop = useMediaQuery('(min-width: 768px)')
 
   // The drawer on small screens is always shown expanded.
@@ -127,9 +129,12 @@ function Sidebar() {
         </nav>
 
         <div className={`pb-4 ${collapsed ? 'flex justify-center' : 'px-5'}`}>
-          <Link
-            to="/downloads"
-            onClick={close}
+          <button
+            type="button"
+            onClick={() => {
+              close()
+              openDownloadModal(true)
+            }}
             title={collapsed ? 'Download' : undefined}
             aria-label="Download"
             className={`flex items-center justify-center gap-2 bg-primary text-sm text-background hover:bg-primary/90 dark:bg-night-primary dark:text-night-background dark:hover:bg-night-primary/90 ${
@@ -138,7 +143,7 @@ function Sidebar() {
           >
             <Download size={collapsed ? 16 : 18} />
             {!collapsed && 'Download'}
-          </Link>
+          </button>
         </div>
 
         <div className={`flex items-center border-t border-primary/15 dark:border-night-primary/15 ${collapsed ? 'flex-col justify-center gap-3 py-3' : 'justify-between px-5 py-4'}`}>

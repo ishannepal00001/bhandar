@@ -26,11 +26,6 @@ function DownloadForm() {
             className="min-w-0 flex-1 bg-transparent py-2.5 placeholder:text-primary/40 focus:outline-none dark:placeholder:text-night-primary/40"
           />
         </div>
-        <select aria-label="Quality" className={`px-3 py-2.5 ${field}`}>
-          <option>HD</option>
-          <option>SD</option>
-          <option>Audio only</option>
-        </select>
         <button
           type="submit"
           className="flex items-center justify-center gap-2 bg-primary px-6 py-2.5 text-sm text-background hover:bg-primary/90 dark:bg-night-primary dark:text-night-background dark:hover:bg-night-primary/90"
