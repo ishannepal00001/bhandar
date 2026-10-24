@@ -1,5 +1,5 @@
 export const config = {
   auth: {
-    codeLength: 4,
+    codeLength: 6,
   },
 } as const

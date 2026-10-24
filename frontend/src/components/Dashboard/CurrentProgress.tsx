@@ -1,14 +1,9 @@
-import { Gauge, Inbox, Pause, Timer, X } from 'lucide-react'
+import { Inbox, Pause, X } from 'lucide-react'
 
 type CurrentDownload = {
   title: string
   quality: string
   thumbnail: string
-  progress: number
-  downloaded: string
-  total: string
-  speed: string
-  eta: string
 }
 
 const muted = 'text-primary/60 dark:text-night-primary/60'
@@ -23,7 +18,7 @@ function CurrentProgress({ download }: { download: CurrentDownload | null }) {
         <div>
           <p className="font-serif text-lg">Nothing downloading</p>
           <p className={`mt-1 text-sm ${muted}`}>
-            Videos you start downloading will show their progress here.
+            Videos you start downloading will show up here.
           </p>
         </div>
       </section>
@@ -62,39 +57,6 @@ function CurrentProgress({ download }: { download: CurrentDownload | null }) {
                 <X size={16} />
               </button>
             </div>
-          </div>
-
-          <div
-            role="progressbar"
-            aria-valuenow={download.progress}
-            aria-valuemin={0}
-            aria-valuemax={100}
-            aria-label={`${download.title} progress`}
-            className="mt-4 h-2 bg-primary/10 dark:bg-night-primary/10"
-          >
-            <div
-              className="h-full bg-accent transition-[width] dark:bg-night-accent"
-              style={{ width: `${download.progress}%` }}
-            />
-          </div>
-
-          <div className={`mt-2 flex flex-wrap items-center justify-between gap-x-6 gap-y-1 text-xs ${muted}`}>
-            <span className="tabular-nums">
-              <span className="font-semibold text-primary dark:text-night-primary">
-                {download.progress}%
-              </span>{' '}
-              · {download.downloaded} of {download.total}
-            </span>
-            <span className="flex items-center gap-4">
-              <span className="flex items-center gap-1.5">
-                <Gauge size={12} />
-                {download.speed}
-              </span>
-              <span className="flex items-center gap-1.5">
-                <Timer size={12} />
-                {download.eta}
-              </span>
-            </span>
           </div>
         </div>
       </div>
