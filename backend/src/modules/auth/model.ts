@@ -1,101 +1,57 @@
-// auth: db tables and queries
-import type { Generated, Insertable, Selectable } from "kysely";
-import { db } from "../../db";
+// auth: db queries on the BHANDAR_DB D1 binding; tables are created by migrations/
+import { env } from 'cloudflare:workers'
+import type { NewOtp, Otp, User } from './type'
 
 export class AuthModelError extends Error {
   constructor(message: string, options?: ErrorOptions) {
-    super(message, options);
-    this.name = "AuthModelError";
+    super(message, options)
+    this.name = 'AuthModelError'
   }
 }
 
-export interface UsersTable {
-  id: Generated<number>;
-  name: string;
-  email: string;
-  // SHA-256 of "<salt>:<password>", never the plain password.
-  password: string;
-  password_salt: string;
-  created_at: Generated<string>;
-}
-
-export interface OtpTable {
-  id: Generated<number>;
-  user_id: number;
-  // SHA-256 of the code, never the plain code.
-  code_hash: string;
-  expires_at: string;
-  created_at: Generated<string>;
-}
-
-export type User = Selectable<UsersTable>;
-export type Otp = Selectable<OtpTable>;
-
 async function query<T>(message: string, run: () => Promise<T>): Promise<T> {
   try {
-    return await run();
+    return await run()
   } catch (err) {
-    throw new AuthModelError(message, { cause: err });
+    throw new AuthModelError(message, { cause: err })
   }
 }
 
 export function listUsers(): Promise<User[]> {
-  return query("Failed to list users", () =>
-    db.selectFrom("users").selectAll().execute(),
-  );
+  return query('Failed to list users', async () => {
+    const { results } = await env.BHANDAR_DB.prepare('SELECT * FROM users').all<User>()
+    return results
+  })
 }
 
 export function findUserById(id: number): Promise<User | undefined> {
-  return query("Failed to look up user", () =>
-    db.selectFrom("users").selectAll().where("id", "=", id).executeTakeFirst(),
-  );
+  return query('Failed to look up user', async () => {
+    const user = await env.BHANDAR_DB.prepare('SELECT * FROM users WHERE id = ?').bind(id).first<User>()
+    return user ?? undefined
+  })
 }
 
-export function upsertUser(user: Insertable<UsersTable>): Promise<void> {
-  return query("Failed to save user", async () => {
-    await db
-      .insertInto("users")
-      .values(user)
-      .onConflict((oc) =>
-        oc
-          .column("name")
-          .doUpdateSet({
-            email: user.email,
-            password: user.password,
-            password_salt: user.password_salt,
-          }),
-      )
-      .execute();
-  });
+export function createOtp(otp: NewOtp): Promise<void> {
+  return query('Failed to save OTP', async () => {
+    await env.BHANDAR_DB.prepare('INSERT INTO otp (user_id, code_hash, expires_at) VALUES (?, ?, ?)')
+      .bind(otp.user_id, otp.code_hash, otp.expires_at)
+      .run()
+  })
 }
 
-export function createOtp(otp: Insertable<OtpTable>): Promise<void> {
-  return query("Failed to save OTP", async () => {
-    await db.insertInto("otp").values(otp).execute();
-  });
-}
-
-export function findValidOtp(
-  codeHash: string,
-  now: string,
-): Promise<Otp | undefined> {
-  return query("Failed to look up OTP", () =>
-    db
-      .selectFrom("otp")
-      .selectAll()
-      .where("code_hash", "=", codeHash)
-      .where("expires_at", ">", now)
-      .executeTakeFirst(),
-  );
+export function findValidOtp(codeHash: string, now: string): Promise<Otp | undefined> {
+  return query('Failed to look up OTP', async () => {
+    const otp = await env.BHANDAR_DB.prepare('SELECT * FROM otp WHERE code_hash = ? AND expires_at > ?')
+      .bind(codeHash, now)
+      .first<Otp>()
+    return otp ?? undefined
+  })
 }
 
 // Returns false when the OTP was already gone, e.g. used by a concurrent login.
 export function deleteOtp(id: number): Promise<boolean> {
-  return query("Failed to delete OTP", async () => {
-    const result = await db
-      .deleteFrom("otp")
-      .where("id", "=", id)
-      .executeTakeFirst();
-    return result.numDeletedRows > 0n;
-  });
+  return query('Failed to delete OTP', async () => {
+    const { meta } = await env.BHANDAR_DB.prepare('DELETE FROM otp WHERE id = ?').bind(id).run()
+    return meta.changes > 0
+  })
 }

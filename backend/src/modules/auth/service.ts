@@ -3,7 +3,7 @@ import { env } from 'cloudflare:workers'
 import type { LoginRequest, SendOtpRequest } from '../../../../schemas/auth'
 import * as authModel from './model'
 import { AuthModelError } from './model'
-import type { AuthServiceErrorKind, LoginResult, SendOtpResult } from './type'
+import type { AuthServiceErrorKind, LoginResult, SendOtpResult, User } from './type'
 import { AuthUtilsError, generateOtp, hashCode, sendOtpMail, signToken, verifyPassword } from './utils'
 
 export class AuthServiceError extends Error {
@@ -29,7 +29,7 @@ async function fromModel<T>(run: () => Promise<T>): Promise<T> {
 export async function sendOtp(input: SendOtpRequest): Promise<SendOtpResult> {
   const users = await fromModel(() => authModel.listUsers())
 
-  let user: authModel.User | undefined
+  let user: User | undefined
   for (const candidate of users) {
     if (await verifyPassword(input.password, candidate.password_salt, candidate.password)) {
       user = candidate

@@ -1,9 +1,9 @@
 // Entry point: mounts api/v1 routers
+import { env } from 'cloudflare:workers'
 import { Hono } from 'hono'
 import { logger } from 'hono/logger'
-import { sql } from 'kysely'
 import { AuthRouteError, authRouter } from './api/v1/auth'
-import { db } from './db'
+import { DownloadsRouteError, downloadsRouter } from './api/v1/download'
 import { IsUserError } from './core/middlewares/isUser'
 import { RateLimitError, rateLimit } from './core/middlewares/rateLimit'
 
@@ -13,11 +13,12 @@ app.use('/api/*', logger())
 app.use('/api/*', rateLimit((env) => env.API_LIMITER))
 
 app.route('/api/v1/auth', authRouter)
+app.route('/api/v1/downloads', downloadsRouter)
 
 // Liveness plus a D1 round trip; outside /api so it isn't rate limited.
 app.get('/health', async (c) => {
   try {
-    await sql`select 1`.execute(db)
+    await env.BHANDAR_DB.prepare('SELECT 1').first()
     return c.json({ status: 'ok', db: 'ok' })
   } catch (err) {
     console.error(err)
@@ -27,7 +28,7 @@ app.get('/health', async (c) => {
 
 app.notFound((c) => c.json({ error: 'Not found' }, 404))
 app.onError((err, c) => {
-  if (err instanceof AuthRouteError) {
+  if (err instanceof AuthRouteError || err instanceof DownloadsRouteError) {
     return c.json({ error: err.message, issues: err.issues }, err.status)
   }
   if (err instanceof RateLimitError) {
@@ -42,3 +43,6 @@ app.onError((err, c) => {
 })
 
 export default app
+
+// Durable Object classes must be exported from the Worker's entry file.
+export { DownloadTracker } from './modules/downloads/tracker'

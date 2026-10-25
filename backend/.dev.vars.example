@@ -10,3 +10,6 @@ SMTP_PASS=
 # Backblaze B2 application key for the bucket (set B2_BUCKET, B2_ENDPOINT and B2_REGION in wrangler.jsonc vars)
 B2_KEY_ID=
 B2_APP_KEY=
+
+# Bearer token the Worker sends to the Render download service (DOWNLOADER_URL in wrangler.jsonc vars)
+DOWNLOADER_API_KEY=
