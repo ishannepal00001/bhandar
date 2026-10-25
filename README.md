@@ -20,10 +20,7 @@ bhandar/
 ├── schemas/              Zod request schemas shared by backend and frontend
 ├── backend/
 │   ├── wrangler.jsonc    Worker config: every var, secret names, D1, rate limits
-│   ├── migrations/       D1 schema, applied with wrangler
-│   ├── scripts/
-│   │   ├── seed.ts         creates the login user in D1
-│   │   └── workers-env.ts  gives Bun scripts the Worker's `cloudflare:workers` env
+│   ├── migrations/       D1 schema and the login user seed, applied with wrangler
 │   ├── src/
 │   │   ├── index.ts      Hono app, mounts the api/v1 routers, error handling
 │   │   ├── db.ts         Kysely on the BHANDAR_DB D1 binding
@@ -54,7 +51,7 @@ Each layer has its own error class (`AuthModelError` → `AuthServiceError` → 
 
 ### Requirements
 
-- Bun 1.3+ (package manager and seed script; the API runs on Workers via Wrangler)
+- Bun 1.3+ (package manager; the API runs on Workers via Wrangler)
 - A Cloudflare account for deploying
 - An SMTP account for sending login codes
 - For downloads: `yt-dlp` and `ffmpeg` on your `PATH`, and a private Backblaze B2 bucket with an application key
@@ -64,9 +61,9 @@ Each layer has its own error class (`AuthModelError` → `AuthServiceError` → 
 ```sh
 cd backend
 bun install
-cp .dev.vars.example .dev.vars   # local secrets, plus SEED_PASSWORD for the seed script
-bun run db:migrate:local         # creates the tables in the local D1 database
-bun run seed:local               # creates the login user
+cp .dev.vars.example .dev.vars   # local secret values
+cp migrations/0002_seed_user.sql.example migrations/0002_seed_user.sql   # fill in email and password hash
+bun run db:migrate:local         # creates the tables and the login user in the local D1 database
 bun run dev                      # http://127.0.0.1:8787
 ```
 
@@ -90,12 +87,11 @@ All configuration is in `backend/wrangler.jsonc`; there is no `config.ts` or `.e
 | `vars` | `COOKIE_NAME`, `COOKIE_SECURE`, `COOKIE_SAME_SITE` | The auth cookie |
 | `vars` | `SMTP_HOST`, `SMTP_PORT`, `SMTP_USER`, `MAIL_FROM` | SMTP server for login codes (port `465` uses TLS) |
 | `vars` | `B2_BUCKET`, `B2_ENDPOINT`, `B2_REGION`, `STORAGE_URL_TTL_SECONDS` | Backblaze B2 bucket, its S3 endpoint, and how long download links last |
-| `vars` | `SEED_NAME`, `SEED_EMAIL` | The login user the seed script creates |
 | `secrets.required` | `JWT_SECRET`, `SMTP_PASS`, `B2_KEY_ID`, `B2_APP_KEY` | Names only. Values go in `.dev.vars` locally and `bunx wrangler secret put <NAME>` when deployed; `wrangler deploy` fails if one is missing |
 | `d1_databases` | `BHANDAR_DB` → `bhandardb` | The database. Run `bunx wrangler d1 create bhandardb` once and put the printed id in `database_id` |
 | `ratelimits` | `SEND_OTP_LIMITER` 3/min, `LOGIN_LIMITER` 5/min, `API_LIMITER` 60/10s | Per-IP limits. Cloudflare counts them per location and approximately |
 
-`SEED_PASSWORD` lives only in `.dev.vars`. It isn't in `secrets.required`, so it never goes to the deployed Worker. The seed script runs under Bun with `scripts/workers-env.ts` preloaded, which builds the same `env` from `wrangler.jsonc` and `.dev.vars`.
+The login user comes from `migrations/0002_seed_user.sql`. It is gitignored because it holds your email and password hash; the committed `.sql.example` shows how to generate the hash with `openssl` and `sha256sum`.
 
 Passwords must be at least `PASSWORD_MIN_LENGTH` (8) characters and include an uppercase letter, a lowercase letter, a number and a symbol.
 
@@ -133,8 +129,7 @@ All routes are under `/api/v1`. Errors come back as `{ "error": "...", "issues"?
 | backend | `bun run dev` | Start the API locally with `wrangler dev` |
 | backend | `bun run deploy` | Deploy the Worker |
 | backend | `bun run cf-typegen` | Regenerate binding types without `wrangler dev` running (e.g. in CI) |
-| backend | `bun run db:migrate:local` / `:remote` | Apply `migrations/` to D1 |
-| backend | `bun run seed:local` / `:remote` | Create or update the login user |
+| backend | `bun run db:migrate:local` / `:remote` | Apply `migrations/` to D1, including the login user seed |
 | backend | `bun test` | Run tests |
 | backend | `bun run typecheck` | Type-check with `tsc` |
 | frontend | `bun run dev` | Start the Vite dev server |

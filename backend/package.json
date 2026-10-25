@@ -8,8 +8,6 @@
     "cf-typegen": "wrangler types",
     "db:migrate:local": "wrangler d1 migrations apply bhandardb --local",
     "db:migrate:remote": "wrangler d1 migrations apply bhandardb --remote",
-    "seed:local": "bun --preload ./scripts/workers-env.ts scripts/seed.ts --local",
-    "seed:remote": "bun --preload ./scripts/workers-env.ts scripts/seed.ts --remote",
     "test": "bun test",
     "typecheck": "tsc --noEmit"
   },

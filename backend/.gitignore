@@ -6,3 +6,6 @@ data/
 *.db-wal
 .wrangler/
 .dev.vars
+
+# Filled-in seed migration: holds the login email and password hash
+migrations/0002_seed_user.sql

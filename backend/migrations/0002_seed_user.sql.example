@@ -1,0 +1,17 @@
+-- Creates the login user. Copy to 0002_seed_user.sql (gitignored), fill in the three values, then:
+--   bun run db:migrate:local   (or db:migrate:remote)
+--
+-- password is SHA-256 of "<salt>:<password>" in lowercase hex, matching hashPassword in
+-- src/modules/auth/utils.ts. Generate both values without saving the password to history:
+--   salt=$(openssl rand -hex 16); echo "salt: $salt"
+--   read -rs -p 'Password: ' pw; echo; printf '%s:%s' "$salt" "$pw" | sha256sum; unset pw
+-- The password must have at least PASSWORD_MIN_LENGTH (8) characters with an uppercase letter,
+-- a lowercase letter, a number and a symbol.
+--
+-- A migration runs once. To change the password later, add a new migration with the same statement.
+INSERT INTO users (name, email, password, password_salt)
+VALUES ('Santosh', '<email>', '<sha256 hex>', '<salt hex>')
+ON CONFLICT(name) DO UPDATE SET
+  email = excluded.email,
+  password = excluded.password,
+  password_salt = excluded.password_salt;
