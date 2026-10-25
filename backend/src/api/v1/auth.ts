@@ -1,13 +1,13 @@
 // /api/v1/auth: accepts requests, returns JSON
+import { env } from 'cloudflare:workers'
 import { Hono } from 'hono'
 import type { Context } from 'hono'
 import { setCookie } from 'hono/cookie'
 import type { ContentfulStatusCode } from 'hono/utils/http-status'
-import { config } from '../../../config'
 import * as authController from '../../modules/auth/controller'
 import { AuthControllerError } from '../../modules/auth/controller'
 import { tokenTtlSeconds } from '../../modules/auth/utils'
-import { rateLimit } from '../../utils/middlewares/rateLimit'
+import { rateLimit } from '../../core/middlewares/rateLimit'
 
 export class AuthRouteError extends Error {
   constructor(
@@ -46,7 +46,7 @@ authRouter.post('/login', rateLimit((env) => env.LOGIN_LIMITER), async (c) => {
   const body = await readJson(c)
   const result = await fromController(() => authController.login(body))
 
-  const { name, secure, sameSite } = config.cookie
+  const { COOKIE_NAME: name, COOKIE_SECURE: secure, COOKIE_SAME_SITE: sameSite } = env
   setCookie(c, name, result.token, { httpOnly: true, secure, sameSite, path: '/', maxAge: tokenTtlSeconds() })
   return c.json(result)
 })

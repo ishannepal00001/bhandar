@@ -7,21 +7,37 @@
   // ../schemas has no node_modules of its own; resolve its zod import from backend's.
   "alias": { "zod": "./node_modules/zod" },
 
-  // Non-secret tunables, read in config.ts through process.env.
+  // wrangler dev regenerates worker-configuration.d.ts whenever this file changes.
+  "dev": { "generate_types": true },
+
+  // Every tunable value, read through the Worker bindings (`import { env } from 'cloudflare:workers'` or c.env).
   "vars": {
-    "OTP_TTL_MINUTES": "10",
-    "JWT_TTL_DAYS": "7",
+    "OTP_LENGTH": 6,
+    "OTP_TTL_MINUTES": 10,
+    "OTP_MAIL_SUBJECT": "Your Bhandar login code",
+    "PASSWORD_MIN_LENGTH": 8,
+    "PASSWORD_SALT_BYTES": 16,
+    "JWT_ALGORITHM": "HS256",
+    "JWT_TTL_DAYS": 7,
     "COOKIE_NAME": "bhandar_token",
-    "COOKIE_SECURE": "true",
+    "COOKIE_SECURE": true,
+    "COOKIE_SAME_SITE": "Strict",
     "SMTP_HOST": "",
-    "SMTP_PORT": "465",
+    "SMTP_PORT": 465,
     "SMTP_USER": "",
-    "MAIL_FROM": ""
+    "MAIL_FROM": "",
+    "B2_BUCKET": "bhandar.bucket",
+    "B2_ENDPOINT": "https://s3.us-east-005.backblazeb2.com",
+    "B2_REGION": "us-east-005",
+    "STORAGE_URL_TTL_SECONDS": 3600,
+    // Used only by scripts/seed.ts; SEED_PASSWORD goes in .dev.vars.
+    "SEED_NAME": "Santosh",
+    "SEED_EMAIL": ""
   },
 
   // Names only. Values go in .dev.vars locally and `wrangler secret put <NAME>` when deployed.
   "secrets": {
-    "required": ["JWT_SECRET", "SMTP_PASS"]
+    "required": ["JWT_SECRET", "SMTP_PASS", "B2_KEY_ID", "B2_APP_KEY"]
   },
 
   "d1_databases": [

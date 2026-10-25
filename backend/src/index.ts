@@ -4,8 +4,8 @@ import { logger } from 'hono/logger'
 import { sql } from 'kysely'
 import { AuthRouteError, authRouter } from './api/v1/auth'
 import { db } from './db'
-import { IsUserError } from './utils/middlewares/isUser'
-import { RateLimitError, rateLimit } from './utils/middlewares/rateLimit'
+import { IsUserError } from './core/middlewares/isUser'
+import { RateLimitError, rateLimit } from './core/middlewares/rateLimit'
 
 const app = new Hono()
 

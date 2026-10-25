@@ -1,8 +1,9 @@
 // Lets a request through only with a valid auth cookie; sets c.var.user for the handler.
+import { env } from 'cloudflare:workers'
 import { getCookie } from 'hono/cookie'
 import { createMiddleware } from 'hono/factory'
-import { config } from '../../../config'
 import { AuthUtilsError, type TokenUser, verifyToken } from '../../modules/auth/utils'
+import type { IsUserEnv } from './isUser.types'
 
 export class IsUserError extends Error {
   constructor(
@@ -15,14 +16,8 @@ export class IsUserError extends Error {
   }
 }
 
-export type IsUserEnv = {
-  Variables: {
-    user: TokenUser
-  }
-}
-
 export const isUser = createMiddleware<IsUserEnv>(async (c, next) => {
-  const token = getCookie(c, config.cookie.name)
+  const token = getCookie(c, env.COOKIE_NAME)
   if (!token) throw new IsUserError('Not logged in', 401)
 
   let user: TokenUser | undefined

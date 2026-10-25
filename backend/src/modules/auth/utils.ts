@@ -2,7 +2,7 @@
 import { randomInt } from 'node:crypto'
 import { sign, verify } from 'hono/jwt'
 import nodemailer from 'nodemailer'
-import { config } from '../../../config'
+import { env } from 'cloudflare:workers'
 
 export class AuthUtilsError extends Error {
   constructor(message: string, options?: ErrorOptions) {
@@ -12,12 +12,12 @@ export class AuthUtilsError extends Error {
 }
 
 export function generateOtp(): string {
-  const { length } = config.otp
+  const length = env.OTP_LENGTH
   return randomInt(0, 10 ** length).toString().padStart(length, '0')
 }
 
 export async function sendOtpMail(to: string, code: string): Promise<void> {
-  const { host, port, user, pass, from, otpSubject } = config.mail
+  const { SMTP_HOST: host, SMTP_PORT: port, SMTP_USER: user, SMTP_PASS: pass, MAIL_FROM: from } = env
   if (!host || !user || !pass || !from) throw new AuthUtilsError('Mail is not configured')
 
   const transport = nodemailer.createTransport({
@@ -31,8 +31,8 @@ export async function sendOtpMail(to: string, code: string): Promise<void> {
     await transport.sendMail({
       from,
       to,
-      subject: otpSubject,
-      text: `Your login code is ${code}. It expires in ${config.otp.ttlMinutes} minutes.`,
+      subject: env.OTP_MAIL_SUBJECT,
+      text: `Your login code is ${code}. It expires in ${env.OTP_TTL_MINUTES} minutes.`,
     })
   } catch (err) {
     throw new AuthUtilsError('Failed to send OTP mail', { cause: err })
@@ -50,7 +50,7 @@ async function sha256Hex(input: string): Promise<string> {
 
 // SHA-256(salt + password) with a random salt.
 export async function hashPassword(password: string): Promise<{ hash: string; salt: string }> {
-  const salt = bytesToHex(crypto.getRandomValues(new Uint8Array(config.password.saltBytes)).buffer)
+  const salt = bytesToHex(crypto.getRandomValues(new Uint8Array(env.PASSWORD_SALT_BYTES)).buffer)
   return { hash: await sha256Hex(`${salt}:${password}`), salt }
 }
 
@@ -64,11 +64,11 @@ export function hashCode(code: string): Promise<string> {
 }
 
 export function tokenTtlSeconds(): number {
-  return config.jwt.ttlDays * 24 * 60 * 60
+  return env.JWT_TTL_DAYS * 24 * 60 * 60
 }
 
 export async function signToken(userId: number, name: string): Promise<string> {
-  const { secret, algorithm } = config.jwt
+  const { JWT_SECRET: secret, JWT_ALGORITHM: algorithm } = env
   if (!secret) throw new AuthUtilsError('JWT secret is not configured')
 
   const now = Math.floor(Date.now() / 1000)
@@ -86,7 +86,7 @@ export type TokenUser = {
 
 // Returns undefined for a bad, tampered or expired token; throws only when the secret is missing.
 export async function verifyToken(token: string): Promise<TokenUser | undefined> {
-  const { secret, algorithm } = config.jwt
+  const { JWT_SECRET: secret, JWT_ALGORITHM: algorithm } = env
   if (!secret) throw new AuthUtilsError('JWT secret is not configured')
 
   try {

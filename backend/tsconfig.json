@@ -13,5 +13,5 @@
     "noUnusedParameters": true,
     "paths": { "zod": ["./node_modules/zod"] }
   },
-  "include": ["src", "../schemas", "config.ts", "worker-configuration.d.ts"]
+  "include": ["src", "../schemas", "worker-configuration.d.ts"]
 }

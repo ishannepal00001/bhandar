@@ -2,8 +2,8 @@
 import type { Context } from 'hono'
 import { deleteCookie } from 'hono/cookie'
 import { z } from 'zod'
-import { config } from '../../../config'
-import { loginRequestSchema, sendOtpRequestSchema } from '../../../../schemas/auth'
+import { env } from 'cloudflare:workers'
+import { createLoginRequestSchema, createSendOtpRequestSchema } from '../../../../schemas/auth'
 import * as authService from './service'
 import { AuthServiceError } from './service'
 import type { AuthServiceErrorKind, LoginResult, LogoutResult, SendOtpResult } from './type'
@@ -26,6 +26,9 @@ const statusByKind: Record<AuthServiceErrorKind, AuthControllerError['status']> 
   TOKEN_ERROR: 500,
   DB_ERROR: 500,
 }
+
+const sendOtpRequestSchema = createSendOtpRequestSchema(env.PASSWORD_MIN_LENGTH)
+const loginRequestSchema = createLoginRequestSchema(env.OTP_LENGTH)
 
 function parse<T>(schema: z.ZodType<T>, body: unknown): T {
   const parsed = schema.safeParse(body)
@@ -56,7 +59,7 @@ export async function login(body: unknown): Promise<LoginResult> {
 
 // Stops at the controller: clears the auth cookie, no service or db involved.
 export function logout(c: Context): LogoutResult {
-  const { name, secure, sameSite } = config.cookie
+  const { COOKIE_NAME: name, COOKIE_SECURE: secure, COOKIE_SAME_SITE: sameSite } = env
   deleteCookie(c, name, { httpOnly: true, secure, sameSite, path: '/' })
   return { loggedOut: true }
 }

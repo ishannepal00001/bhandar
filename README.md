@@ -8,9 +8,9 @@ A personal Facebook video downloader. Paste a link, pick a quality, and Bhandar 
 
 | Part | Tech |
 |---|---|
-| Backend | [Hono](https://hono.dev) on [Cloudflare Workers](https://developers.cloudflare.com/workers/), [Kysely](https://kysely.dev) on D1, Zod, Nodemailer (`nodejs_compat`) |
+| Backend | [Hono](https://hono.dev) on [Cloudflare Workers](https://developers.cloudflare.com/workers/), [Kysely](https://kysely.dev) on D1, Zod, Nodemailer (`nodejs_compat`), aws4fetch for B2 |
 | Frontend | React 19, Vite, TanStack Router, Zustand, Tailwind CSS, lucide-react |
-| Shared | Zod request schemas in `schemas/`, used by the backend (and later the frontend) |
+| Shared | Zod request schema builders in `schemas/`, given their lengths from the backend's vars |
 | External | `yt-dlp` + `ffmpeg` for downloads, Backblaze B2 for storage, an SMTP server for login codes |
 
 ## Layout
@@ -19,10 +19,11 @@ A personal Facebook video downloader. Paste a link, pick a quality, and Bhandar 
 bhandar/
 ├── schemas/              Zod request schemas shared by backend and frontend
 ├── backend/
-│   ├── wrangler.jsonc    Worker config: vars, secret names, D1, rate limits
-│   ├── config.ts         every constant and env read lives here
+│   ├── wrangler.jsonc    Worker config: every var, secret names, D1, rate limits
 │   ├── migrations/       D1 schema, applied with wrangler
-│   ├── scripts/seed.ts   creates the login user in D1
+│   ├── scripts/
+│   │   ├── seed.ts         creates the login user in D1
+│   │   └── workers-env.ts  gives Bun scripts the Worker's `cloudflare:workers` env
 │   ├── src/
 │   │   ├── index.ts      Hono app, mounts the api/v1 routers, error handling
 │   │   ├── db.ts         Kysely on the BHANDAR_DB D1 binding
@@ -33,13 +34,19 @@ bhandar/
 │   │   │   ├── model.ts        database access
 │   │   │   ├── utils.ts        helpers (hashing, JWT, mail, ...)
 │   │   │   └── type.ts         shared types
-│   │   └── utils/middlewares/
-│   │       ├── isUser.ts       guards routes with the auth cookie
-│   │       └── rateLimit.ts    per-IP limits from the ratelimits bindings
+│   │   └── core/
+│   │       ├── types.ts          re-exports every *.types.ts in core/
+│   │       ├── middlewares/
+│   │       │   ├── isUser.ts     guards routes with the auth cookie
+│   │       │   └── rateLimit.ts  per-IP limits from the ratelimits bindings
+│   │       └── utils/
+│   │           └── storage.ts    Storage class for Backblaze B2 (upload, list, get, delete)
 │   └── legacy/           previous downloader implementation, not mounted
 └── frontend/
     └── src/              pages, routes, components, stores
 ```
+
+In `core/`, each file's types sit next to it in `<name>.types.ts`.
 
 Each layer has its own error class (`AuthModelError` → `AuthServiceError` → `AuthControllerError` → `AuthRouteError`), and each layer converts the one below it, so HTTP status codes are decided in one place.
 
@@ -57,8 +64,7 @@ Each layer has its own error class (`AuthModelError` → `AuthServiceError` → 
 ```sh
 cd backend
 bun install
-cp .dev.vars.example .dev.vars   # local secret values
-cp .env.example .env             # SEED_EMAIL / SEED_PASSWORD for the seed script
+cp .dev.vars.example .dev.vars   # local secrets, plus SEED_PASSWORD for the seed script
 bun run db:migrate:local         # creates the tables in the local D1 database
 bun run seed:local               # creates the login user
 bun run dev                      # http://127.0.0.1:8787
@@ -74,20 +80,24 @@ bun run dev              # Vite dev server; /api is proxied to the backend on :8
 
 ## Configuration
 
-Fixed rules (OTP length, password length, JWT algorithm, cookie SameSite) are constants in `backend/config.ts`. Everything else is in `backend/wrangler.jsonc` and reaches `config.ts` through `process.env`:
+All configuration is in `backend/wrangler.jsonc`; there is no `config.ts` or `.env`. Code reads it from the Worker bindings, either `import { env } from 'cloudflare:workers'` or `c.env` (`new Storage(c.env)`), never `process.env`. Vars hold real JSON types (numbers, booleans). `wrangler dev` regenerates `worker-configuration.d.ts` whenever `wrangler.jsonc` changes (`dev.generate_types`).
 
 | Where | Keys | Purpose |
 |---|---|---|
-| `vars` | `OTP_TTL_MINUTES`, `JWT_TTL_DAYS` | How long a login code and a login last |
-| `vars` | `COOKIE_NAME`, `COOKIE_SECURE` | The auth cookie |
+| `vars` | `OTP_LENGTH`, `OTP_TTL_MINUTES`, `OTP_MAIL_SUBJECT` | Login codes: digits, lifetime and email subject |
+| `vars` | `PASSWORD_MIN_LENGTH`, `PASSWORD_SALT_BYTES` | Password rule and salt size |
+| `vars` | `JWT_ALGORITHM`, `JWT_TTL_DAYS` | Login token signing and lifetime |
+| `vars` | `COOKIE_NAME`, `COOKIE_SECURE`, `COOKIE_SAME_SITE` | The auth cookie |
 | `vars` | `SMTP_HOST`, `SMTP_PORT`, `SMTP_USER`, `MAIL_FROM` | SMTP server for login codes (port `465` uses TLS) |
-| `secrets.required` | `JWT_SECRET`, `SMTP_PASS` | Names only. Values go in `.dev.vars` locally and `bunx wrangler secret put <NAME>` when deployed; `wrangler deploy` fails if one is missing |
+| `vars` | `B2_BUCKET`, `B2_ENDPOINT`, `B2_REGION`, `STORAGE_URL_TTL_SECONDS` | Backblaze B2 bucket, its S3 endpoint, and how long download links last |
+| `vars` | `SEED_NAME`, `SEED_EMAIL` | The login user the seed script creates |
+| `secrets.required` | `JWT_SECRET`, `SMTP_PASS`, `B2_KEY_ID`, `B2_APP_KEY` | Names only. Values go in `.dev.vars` locally and `bunx wrangler secret put <NAME>` when deployed; `wrangler deploy` fails if one is missing |
 | `d1_databases` | `BHANDAR_DB` → `bhandardb` | The database. Run `bunx wrangler d1 create bhandardb` once and put the printed id in `database_id` |
 | `ratelimits` | `SEND_OTP_LIMITER` 3/min, `LOGIN_LIMITER` 5/min, `API_LIMITER` 60/10s | Per-IP limits. Cloudflare counts them per location and approximately |
 
-`backend/.env` is only read by the seed script (`SEED_EMAIL`, `SEED_PASSWORD`).
+`SEED_PASSWORD` lives only in `.dev.vars`. It isn't in `secrets.required`, so it never goes to the deployed Worker. The seed script runs under Bun with `scripts/workers-env.ts` preloaded, which builds the same `env` from `wrangler.jsonc` and `.dev.vars`.
 
-Passwords must be at least 8 characters and include an uppercase letter, a lowercase letter, a number and a symbol.
+Passwords must be at least `PASSWORD_MIN_LENGTH` (8) characters and include an uppercase letter, a lowercase letter, a number and a symbol.
 
 ## How login works
 
@@ -122,7 +132,7 @@ All routes are under `/api/v1`. Errors come back as `{ "error": "...", "issues"?
 |---|---|---|
 | backend | `bun run dev` | Start the API locally with `wrangler dev` |
 | backend | `bun run deploy` | Deploy the Worker |
-| backend | `bun run cf-typegen` | Regenerate binding types after changing `wrangler.jsonc` |
+| backend | `bun run cf-typegen` | Regenerate binding types without `wrangler dev` running (e.g. in CI) |
 | backend | `bun run db:migrate:local` / `:remote` | Apply `migrations/` to D1 |
 | backend | `bun run seed:local` / `:remote` | Create or update the login user |
 | backend | `bun test` | Run tests |

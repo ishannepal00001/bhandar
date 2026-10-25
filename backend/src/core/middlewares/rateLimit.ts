@@ -1,5 +1,6 @@
 // Limits requests per client IP with a Workers rate limit binding from wrangler.jsonc.
 import { createMiddleware } from 'hono/factory'
+import type { RateLimitEnv } from './rateLimit.types'
 
 export class RateLimitError extends Error {
   readonly status = 429
@@ -8,10 +9,6 @@ export class RateLimitError extends Error {
     super('Too many requests, try again in a minute')
     this.name = 'RateLimitError'
   }
-}
-
-export type RateLimitEnv = {
-  Bindings: Env
 }
 
 export const rateLimit = (pick: (env: Env) => RateLimit) =>

@@ -1,5 +1,5 @@
 // auth: business logic
-import { config } from '../../../config'
+import { env } from 'cloudflare:workers'
 import type { LoginRequest, SendOtpRequest } from '../../../../schemas/auth'
 import * as authModel from './model'
 import { AuthModelError } from './model'
@@ -39,7 +39,7 @@ export async function sendOtp(input: SendOtpRequest): Promise<SendOtpResult> {
   if (!user) throw new AuthServiceError('Invalid password', 'INVALID_PASSWORD')
 
   const code = generateOtp()
-  const expiresAt = new Date(Date.now() + config.otp.ttlMinutes * 60_000).toISOString()
+  const expiresAt = new Date(Date.now() + env.OTP_TTL_MINUTES * 60_000).toISOString()
   const codeHash = await hashCode(code)
   await fromModel(() => authModel.createOtp({ user_id: user.id, code_hash: codeHash, expires_at: expiresAt }))
 
