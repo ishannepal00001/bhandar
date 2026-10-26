@@ -7,7 +7,8 @@ import { env } from 'cloudflare:workers'
 import { createLoginRequestSchema, createSendOtpRequestSchema } from '../../../../schemas/auth'
 import * as authService from './service'
 import { AuthServiceError } from './service.error'
-import type { AuthServiceErrorKind, LoginResult, LogoutResult, SendOtpResult } from './type'
+import type { LogoutResult } from './controller.types'
+import type { AuthServiceErrorKind, LoginResult, SendOtpResult } from './service.types'
 import { AuthControllerError } from './controller.error'
 
 const statusByKind: Record<AuthServiceErrorKind, AuthControllerError['status']> = {

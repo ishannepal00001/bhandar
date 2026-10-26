@@ -13,18 +13,9 @@ import { DurableObject, env } from 'cloudflare:workers'
 import { Fetchr } from '../../core/middlewares/fetchr'
 import { FetchrError } from '../../core/middlewares/fetchr.error'
 import { insertDownload } from './model'
-import type { DownloadEvent, FinishedJob, QueuedJob, StartResult } from './type'
+import type { DownloadEvent, Stream, StartResult, TrackedJob } from './tracker.types'
 import { createJob, getJob, toJob } from './utils'
-
-type TrackedJob = QueuedJob & {
-  user_id: number
-  failures: number
-}
-
-type Stream = {
-  userId: number
-  writer: WritableStreamDefaultWriter<Uint8Array>
-}
+import type { FinishedJob, QueuedJob } from './utils.types'
 
 const CODE_KEY = 'fetchr_code'
 

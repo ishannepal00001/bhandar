@@ -28,12 +28,12 @@ bhandar/
 │   │   │   ├── controller.ts   validation against schemas/
 │   │   │   ├── service.ts      business logic
 │   │   │   ├── model.ts        SQL on the BHANDAR_DB D1 binding
-│   │   │   ├── utils.ts        helpers (hashing, JWT, mail, ...)
-│   │   │   ├── type.ts         shared types
+│   │   │   ├── utils.ts        helpers (hashing, JWT, mail, fetchr endpoints, ...)
 │   │   │   └── tracker.ts      (downloads) DownloadTracker Durable Object
 │   │   └── core/
 │   │       ├── types.ts          re-exports every *.types.ts in core/
 │   │       ├── middlewares/
+│   │       │   ├── fetchr.ts     signs requests to fetchr and keeps its rolling code
 │   │       │   ├── isUser.ts     guards routes with the auth cookie
 │   │       │   └── rateLimit.ts  per-IP limits from the ratelimits bindings
 │   │       └── utils/
@@ -43,7 +43,7 @@ bhandar/
     └── src/              pages, routes, components, stores
 ```
 
-In `core/`, each file's types sit next to it in `<name>.types.ts`.
+Each file's types sit next to it in `<name>.types.ts` and its error class in `<name>.error.ts` (e.g. `service.ts`, `service.types.ts`, `service.error.ts`). `core/types.ts` re-exports the core ones.
 
 Each layer has its own error class (for example `AuthModelError` → `AuthServiceError` → `AuthControllerError` → `AuthRouteError`, and the same chain for downloads), and each layer converts the one below it, so HTTP status codes are decided in one place.
 
@@ -162,7 +162,7 @@ All routes are under `/api/v1`, and every `/downloads` route needs the auth cook
 
 ### Request and response schemas
 
-Request bodies are checked by the zod builders in `schemas/` (`schemas/auth.ts`, `schemas/downloads.ts`). Job responses are checked against `backend/src/modules/downloads/type.ts`.
+Request bodies are checked by the zod builders in `schemas/` (`schemas/auth.ts`, `schemas/downloads.ts`). Job responses are checked against `fetchrDownloadSchema` in `backend/src/modules/downloads/utils.ts`.
 
 ```ts
 // Shared types

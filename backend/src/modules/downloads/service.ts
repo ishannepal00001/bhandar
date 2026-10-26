@@ -7,7 +7,9 @@ import { Storage } from '../../core/utils/storage'
 import { StorageError } from '../../core/utils/storage.error'
 import * as downloadsModel from './model'
 import { DownloadsModelError } from './model.error'
-import type { DeleteResult, Download, FileLinkResult, FinishedJob, Job, QueuedJob } from './type'
+import type { Download } from './model.types'
+import type { DeleteResult, FileLinkResult } from './service.types'
+import type { FinishedJob, Job, QueuedJob } from './utils.types'
 import { DownloadsServiceError } from './service.error'
 
 function tracker() {

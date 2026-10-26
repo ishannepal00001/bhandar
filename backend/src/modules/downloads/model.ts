@@ -1,7 +1,7 @@
 // downloads: db queries on the BHANDAR_DB D1 binding; tables are created by migrations/
 // insertDownload(): Ignores a repeat insert, so a retried alarm can't store the same job twice.
 import { env } from 'cloudflare:workers'
-import type { Download } from './type'
+import type { Download } from './model.types'
 import { DownloadsModelError } from './model.error'
 
 async function query<T>(message: string, run: () => Promise<T>): Promise<T> {

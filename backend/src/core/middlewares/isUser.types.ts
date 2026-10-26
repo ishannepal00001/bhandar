@@ -1,5 +1,5 @@
 // Types for the isUser middleware.
-import type { TokenUser } from '../../modules/auth/utils'
+import type { TokenUser } from '../../modules/auth/utils.types'
 
 export type IsUserEnv = {
   Variables: {

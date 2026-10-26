@@ -1,5 +1,5 @@
 // downloads: errors for the service
-import type { DownloadsServiceErrorKind } from './type'
+import type { DownloadsServiceErrorKind } from './service.types'
 
 export class DownloadsServiceError extends Error {
   constructor(

@@ -4,7 +4,8 @@ import { z } from 'zod'
 import { createDownloadRequestSchema } from '../../../../schemas/downloads'
 import * as downloadsService from './service'
 import { DownloadsServiceError } from './service.error'
-import type { DeleteResult, DownloadsServiceErrorKind, FileLinkResult, Job, QueuedJob } from './type'
+import type { DeleteResult, DownloadsServiceErrorKind, FileLinkResult } from './service.types'
+import type { Job, QueuedJob } from './utils.types'
 import { DownloadsControllerError } from './controller.error'
 
 const statusByKind: Record<DownloadsServiceErrorKind, DownloadsControllerError['status']> = {

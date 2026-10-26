@@ -8,6 +8,7 @@ import { sign, verify } from 'hono/jwt'
 import nodemailer from 'nodemailer'
 import { env } from 'cloudflare:workers'
 import { AuthUtilsError } from './utils.error'
+import type { TokenUser } from './utils.types'
 
 export function generateOtp(): string {
   const length = env.OTP_LENGTH
@@ -72,11 +73,6 @@ export async function signToken(userId: number, name: string): Promise<string> {
   } catch (err) {
     throw new AuthUtilsError('Failed to sign token', { cause: err })
   }
-}
-
-export type TokenUser = {
-  id: number
-  name: string
 }
 
 export async function verifyToken(token: string): Promise<TokenUser | undefined> {

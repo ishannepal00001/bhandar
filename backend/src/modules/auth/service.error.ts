@@ -1,5 +1,5 @@
 // auth: errors for the service
-import type { AuthServiceErrorKind } from './type'
+import type { AuthServiceErrorKind } from './service.types'
 
 export class AuthServiceError extends Error {
   constructor(
