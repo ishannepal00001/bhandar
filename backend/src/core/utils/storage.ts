@@ -1,24 +1,19 @@
 // Backblaze B2 storage through its S3-compatible API. Files are keyed by a generated id.
+// Storage(): Takes the Worker bindings from wrangler.jsonc, e.g. `new Storage(c.env)`.
+// Storage.upload(): Streams need `size`, since B2 rejects uploads without a Content-Length.
+// Storage.getFile(): Returns the file's metadata and a short-lived download link. Pass `filename` to make the
+//   browser save it.
+// encodeKey(): Encodes each segment so the slashes in a key like downloads/<client>/<id>/<file> stay path
+//   separators.
 import { AwsClient } from 'aws4fetch'
 import type { StorageEnv, StoredFile, StoredFileWithUrl } from './storage.types'
-
-export class StorageError extends Error {
-  constructor(
-    message: string,
-    readonly status: 404 | 500 = 500,
-    options?: ErrorOptions,
-  ) {
-    super(message, options)
-    this.name = 'StorageError'
-  }
-}
+import { StorageError } from './storage.error'
 
 export class Storage {
   private readonly client: AwsClient
   private readonly base: string
   private readonly urlTtlSeconds: number
 
-  // Takes the Worker bindings from wrangler.jsonc, e.g. `new Storage(c.env)`.
   constructor(env: StorageEnv) {
     const { B2_KEY_ID, B2_APP_KEY, B2_BUCKET, B2_ENDPOINT, B2_REGION, STORAGE_URL_TTL_SECONDS } = env
     if (!B2_KEY_ID || !B2_APP_KEY || !B2_BUCKET || !B2_ENDPOINT || !B2_REGION) {
@@ -34,7 +29,6 @@ export class Storage {
     this.urlTtlSeconds = STORAGE_URL_TTL_SECONDS
   }
 
-  // Streams need `size`, since B2 rejects uploads without a Content-Length.
   async upload(body: ReadableStream | ArrayBuffer, contentType: string, size?: number): Promise<{ id: string }> {
     const id = crypto.randomUUID()
     const headers: Record<string, string> = { 'Content-Type': contentType }
@@ -71,9 +65,8 @@ export class Storage {
     return files
   }
 
-  // Returns the file's metadata and a short-lived download link. Pass `filename` to make the browser save it.
   async getFile(id: string, filename?: string): Promise<StoredFileWithUrl> {
-    const objectUrl = `${this.base}/${encodeURIComponent(id)}`
+    const objectUrl = `${this.base}/${encodeKey(id)}`
     const res = await this.send(objectUrl, { method: 'HEAD' })
     if (res.status === 404) throw new StorageError('File not found', 404)
     if (!res.ok) throw new StorageError(`Lookup failed with ${res.status}`)
@@ -96,7 +89,7 @@ export class Storage {
   }
 
   async deleteFile(id: string): Promise<void> {
-    const res = await this.send(`${this.base}/${encodeURIComponent(id)}`, { method: 'DELETE' })
+    const res = await this.send(`${this.base}/${encodeKey(id)}`, { method: 'DELETE' })
     if (!res.ok && res.status !== 404) throw new StorageError(`Delete failed with ${res.status}`)
   }
 
@@ -111,4 +104,8 @@ export class Storage {
 
 function xmlValue(xml: string, tag: string): string | undefined {
   return xml.match(new RegExp(`<${tag}>([\\s\\S]*?)</${tag}>`))?.[1]
+}
+
+function encodeKey(key: string): string {
+  return key.split('/').map(encodeURIComponent).join('/')
 }

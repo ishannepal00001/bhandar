@@ -1,23 +1,14 @@
 // auth: request handling, validated against schema
+// logout(): Stops at the controller: clears the auth cookie, no service or db involved.
 import type { Context } from 'hono'
 import { deleteCookie } from 'hono/cookie'
 import { z } from 'zod'
 import { env } from 'cloudflare:workers'
 import { createLoginRequestSchema, createSendOtpRequestSchema } from '../../../../schemas/auth'
 import * as authService from './service'
-import { AuthServiceError } from './service'
+import { AuthServiceError } from './service.error'
 import type { AuthServiceErrorKind, LoginResult, LogoutResult, SendOtpResult } from './type'
-
-export class AuthControllerError extends Error {
-  constructor(
-    message: string,
-    readonly status: 400 | 401 | 500 | 502,
-    readonly issues?: Partial<Record<string, string[]>>,
-  ) {
-    super(message)
-    this.name = 'AuthControllerError'
-  }
-}
+import { AuthControllerError } from './controller.error'
 
 const statusByKind: Record<AuthServiceErrorKind, AuthControllerError['status']> = {
   INVALID_CODE: 401,
@@ -57,7 +48,6 @@ export async function login(body: unknown): Promise<LoginResult> {
   return fromService(() => authService.login(input))
 }
 
-// Stops at the controller: clears the auth cookie, no service or db involved.
 export function logout(c: Context): LogoutResult {
   const { COOKIE_NAME: name, COOKIE_SECURE: secure, COOKIE_SAME_SITE: sameSite } = env
   deleteCookie(c, name, { httpOnly: true, secure, sameSite, path: '/' })

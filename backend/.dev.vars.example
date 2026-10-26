@@ -11,5 +11,6 @@ SMTP_PASS=
 B2_KEY_ID=
 B2_APP_KEY=
 
-# Bearer token the Worker sends to the Render download service (DOWNLOADER_URL in wrangler.jsonc vars)
-DOWNLOADER_API_KEY=
+# fetchr's first rolling code (its FETCHR_SEED_CODE). Used only until the first request rotates it;
+# the DownloadTracker keeps the current code after that (DOWNLOADER_URL and DOWNLOADER_CLIENT_ID in wrangler.jsonc vars)
+DOWNLOADER_SEED_CODE=

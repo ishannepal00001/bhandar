@@ -1,22 +1,14 @@
 // downloads: business logic
+// start(): Hands the link to the tracker, which queues it on fetchr; the result arrives later over SSE.
+// remove(): Removes the B2 file (if any) before the row, so a failed delete can be retried.
 import { env } from 'cloudflare:workers'
 import type { DownloadRequest } from '../../../../schemas/downloads'
-import { Storage, StorageError } from '../../core/utils/storage'
+import { Storage } from '../../core/utils/storage'
+import { StorageError } from '../../core/utils/storage.error'
 import * as downloadsModel from './model'
-import { DownloadsModelError } from './model'
-import type { DeleteResult, Download, DownloadsServiceErrorKind, FileLinkResult, FinishedJob, Job, QueuedJob } from './type'
-import { DownloadsUtilsError, createJob } from './utils'
-
-export class DownloadsServiceError extends Error {
-  constructor(
-    message: string,
-    readonly kind: DownloadsServiceErrorKind,
-    options?: ErrorOptions,
-  ) {
-    super(message, options)
-    this.name = 'DownloadsServiceError'
-  }
-}
+import { DownloadsModelError } from './model.error'
+import type { DeleteResult, Download, FileLinkResult, FinishedJob, Job, QueuedJob } from './type'
+import { DownloadsServiceError } from './service.error'
 
 function tracker() {
   return env.DOWNLOAD_TRACKER.getByName(env.DOWNLOAD_TRACKER_NAME)
@@ -41,20 +33,13 @@ async function fromStorage<T>(run: () => Promise<T>): Promise<T> {
 }
 
 function toFinishedJob({ user_id: _, ...download }: Download): FinishedJob {
-  return { ...download, next_code: null }
+  return download
 }
 
-// Queues the job on Render and hands it to the tracker; the result arrives later over SSE.
 export async function start(userId: number, input: DownloadRequest): Promise<QueuedJob> {
-  let job: QueuedJob
-  try {
-    job = await createJob(input.url)
-  } catch (err) {
-    if (!(err instanceof DownloadsUtilsError)) throw err
-    throw new DownloadsServiceError(err.message, 'DOWNLOADER_ERROR', { cause: err })
-  }
-  await tracker().track(userId, job)
-  return job
+  const result = await tracker().start(userId, input.url)
+  if ('error' in result) throw new DownloadsServiceError(result.error, 'DOWNLOADER_ERROR')
+  return result.job
 }
 
 export async function list(userId: number): Promise<Job[]> {
@@ -82,7 +67,6 @@ export async function fileLink(userId: number, id: string): Promise<FileLinkResu
   return { url: file.url }
 }
 
-// Removes the B2 file (if any) before the row, so a failed delete can be retried.
 export async function remove(userId: number, id: string): Promise<DeleteResult> {
   const download = await fromModel(() => downloadsModel.findDownload(userId, id))
   if (!download) throw new DownloadsServiceError('Download not found', 'NOT_FOUND')

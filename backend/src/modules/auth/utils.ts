@@ -1,15 +1,13 @@
 // auth: helpers
+// sha256Hex(): SHA-256 with Web Crypto, which Workers and Bun both provide.
+// hashPassword(): SHA-256(salt + password) with a random salt.
+// hashCode(): Unsalted so a code can be looked up by its hash; codes are single use and short-lived.
+// verifyToken(): Returns undefined for a bad, tampered or expired token; throws only when the secret is missing.
 import { randomInt } from 'node:crypto'
 import { sign, verify } from 'hono/jwt'
 import nodemailer from 'nodemailer'
 import { env } from 'cloudflare:workers'
-
-export class AuthUtilsError extends Error {
-  constructor(message: string, options?: ErrorOptions) {
-    super(message, options)
-    this.name = 'AuthUtilsError'
-  }
-}
+import { AuthUtilsError } from './utils.error'
 
 export function generateOtp(): string {
   const length = env.OTP_LENGTH
@@ -39,7 +37,6 @@ export async function sendOtpMail(to: string, code: string): Promise<void> {
   }
 }
 
-// SHA-256 with Web Crypto, which Workers and Bun both provide.
 function bytesToHex(bytes: ArrayBuffer): string {
   return [...new Uint8Array(bytes)].map((b) => b.toString(16).padStart(2, '0')).join('')
 }
@@ -48,7 +45,6 @@ async function sha256Hex(input: string): Promise<string> {
   return bytesToHex(await crypto.subtle.digest('SHA-256', new TextEncoder().encode(input)))
 }
 
-// SHA-256(salt + password) with a random salt.
 export async function hashPassword(password: string): Promise<{ hash: string; salt: string }> {
   const salt = bytesToHex(crypto.getRandomValues(new Uint8Array(env.PASSWORD_SALT_BYTES)).buffer)
   return { hash: await sha256Hex(`${salt}:${password}`), salt }
@@ -58,7 +54,6 @@ export async function verifyPassword(password: string, salt: string, expectedHas
   return (await sha256Hex(`${salt}:${password}`)) === expectedHash
 }
 
-// Unsalted so a code can be looked up by its hash; codes are single use and short-lived.
 export function hashCode(code: string): Promise<string> {
   return sha256Hex(code)
 }
@@ -84,7 +79,6 @@ export type TokenUser = {
   name: string
 }
 
-// Returns undefined for a bad, tampered or expired token; throws only when the secret is missing.
 export async function verifyToken(token: string): Promise<TokenUser | undefined> {
   const { JWT_SECRET: secret, JWT_ALGORITHM: algorithm } = env
   if (!secret) throw new AuthUtilsError('JWT secret is not configured')

@@ -30,8 +30,9 @@
     "B2_ENDPOINT": "https://s3.us-east-005.backblazeb2.com",
     "B2_REGION": "us-east-005",
     "STORAGE_URL_TTL_SECONDS": 3600,
-    // The Render download service and how the DownloadTracker polls it.
-    "DOWNLOADER_URL": "",
+    // The fetchr download service, the client id it knows us by, and how the DownloadTracker polls it.
+    "DOWNLOADER_URL": "http://127.0.0.1:8000",
+    "DOWNLOADER_CLIENT_ID": "my-client",
     "DOWNLOADER_TIMEOUT_SECONDS": 15,
     "DOWNLOAD_POLL_SECONDS": 8,
     "DOWNLOAD_MAX_POLL_FAILURES": 15,
@@ -42,7 +43,7 @@
 
   // Names only. Values go in .dev.vars locally and `wrangler secret put <NAME>` when deployed.
   "secrets": {
-    "required": ["JWT_SECRET", "SMTP_PASS", "B2_KEY_ID", "B2_APP_KEY", "DOWNLOADER_API_KEY"]
+    "required": ["JWT_SECRET", "SMTP_PASS", "B2_KEY_ID", "B2_APP_KEY", "DOWNLOADER_SEED_CODE"]
   },
 
   "d1_databases": [
@@ -55,7 +56,7 @@
     }
   ],
 
-  // One DownloadTracker instance (named DOWNLOAD_TRACKER_NAME) polls Render and serves the SSE stream.
+  // One DownloadTracker instance (named DOWNLOAD_TRACKER_NAME) holds fetchr's rolling code, polls fetchr and serves the SSE stream.
   "durable_objects": {
     "bindings": [{ "name": "DOWNLOAD_TRACKER", "class_name": "DownloadTracker" }]
   },

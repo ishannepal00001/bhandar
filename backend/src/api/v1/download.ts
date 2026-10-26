@@ -1,22 +1,12 @@
 // /api/v1/downloads: accepts requests, returns JSON (and the SSE stream)
+// POST /: Returns as soon as fetchr has queued the job; the final state comes over /events.
 import { Hono } from 'hono'
 import type { Context } from 'hono'
-import type { ContentfulStatusCode } from 'hono/utils/http-status'
 import { isUser } from '../../core/middlewares/isUser'
 import type { IsUserEnv } from '../../core/types'
 import * as downloadsController from '../../modules/downloads/controller'
-import { DownloadsControllerError } from '../../modules/downloads/controller'
-
-export class DownloadsRouteError extends Error {
-  constructor(
-    message: string,
-    readonly status: ContentfulStatusCode,
-    readonly issues?: Partial<Record<string, string[]>>,
-  ) {
-    super(message)
-    this.name = 'DownloadsRouteError'
-  }
-}
+import { DownloadsControllerError } from '../../modules/downloads/controller.error'
+import { DownloadsRouteError } from './download.error'
 
 async function readJson(c: Context): Promise<unknown> {
   return c.req.json().catch(() => {
@@ -37,7 +27,6 @@ export const downloadsRouter = new Hono<IsUserEnv>()
 
 downloadsRouter.use(isUser)
 
-// Returns as soon as Render has queued the job; the final state comes over /events.
 downloadsRouter.post('/', async (c) => {
   const body = await readJson(c)
   return c.json(await fromController(() => downloadsController.start(c.var.user.id, body)), 202)

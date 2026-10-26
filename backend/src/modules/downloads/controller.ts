@@ -3,19 +3,9 @@ import { env } from 'cloudflare:workers'
 import { z } from 'zod'
 import { createDownloadRequestSchema } from '../../../../schemas/downloads'
 import * as downloadsService from './service'
-import { DownloadsServiceError } from './service'
+import { DownloadsServiceError } from './service.error'
 import type { DeleteResult, DownloadsServiceErrorKind, FileLinkResult, Job, QueuedJob } from './type'
-
-export class DownloadsControllerError extends Error {
-  constructor(
-    message: string,
-    readonly status: 400 | 404 | 409 | 500 | 502,
-    readonly issues?: Partial<Record<string, string[]>>,
-  ) {
-    super(message)
-    this.name = 'DownloadsControllerError'
-  }
-}
+import { DownloadsControllerError } from './controller.error'
 
 const statusByKind: Record<DownloadsServiceErrorKind, DownloadsControllerError['status']> = {
   NOT_FOUND: 404,

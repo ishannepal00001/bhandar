@@ -1,11 +1,16 @@
 // Entry point: mounts api/v1 routers
+// GET /health: Liveness plus a D1 round trip; outside /api so it isn't rate limited.
+// export DownloadTracker: Durable Object classes must be exported from the Worker's entry file.
 import { env } from 'cloudflare:workers'
 import { Hono } from 'hono'
 import { logger } from 'hono/logger'
-import { AuthRouteError, authRouter } from './api/v1/auth'
-import { DownloadsRouteError, downloadsRouter } from './api/v1/download'
-import { IsUserError } from './core/middlewares/isUser'
-import { RateLimitError, rateLimit } from './core/middlewares/rateLimit'
+import { authRouter } from './api/v1/auth'
+import { AuthRouteError } from './api/v1/auth.error'
+import { downloadsRouter } from './api/v1/download'
+import { DownloadsRouteError } from './api/v1/download.error'
+import { IsUserError } from './core/middlewares/isUser.error'
+import { rateLimit } from './core/middlewares/rateLimit'
+import { RateLimitError } from './core/middlewares/rateLimit.error'
 
 const app = new Hono()
 
@@ -15,7 +20,6 @@ app.use('/api/*', rateLimit((env) => env.API_LIMITER))
 app.route('/api/v1/auth', authRouter)
 app.route('/api/v1/downloads', downloadsRouter)
 
-// Liveness plus a D1 round trip; outside /api so it isn't rate limited.
 app.get('/health', async (c) => {
   try {
     await env.BHANDAR_DB.prepare('SELECT 1').first()
@@ -44,5 +48,4 @@ app.onError((err, c) => {
 
 export default app
 
-// Durable Object classes must be exported from the Worker's entry file.
 export { DownloadTracker } from './modules/downloads/tracker'

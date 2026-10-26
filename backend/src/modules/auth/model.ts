@@ -1,13 +1,8 @@
 // auth: db queries on the BHANDAR_DB D1 binding; tables are created by migrations/
+// deleteOtp(): Returns false when the OTP was already gone, e.g. used by a concurrent login.
 import { env } from 'cloudflare:workers'
 import type { NewOtp, Otp, User } from './type'
-
-export class AuthModelError extends Error {
-  constructor(message: string, options?: ErrorOptions) {
-    super(message, options)
-    this.name = 'AuthModelError'
-  }
-}
+import { AuthModelError } from './model.error'
 
 async function query<T>(message: string, run: () => Promise<T>): Promise<T> {
   try {
@@ -48,7 +43,6 @@ export function findValidOtp(codeHash: string, now: string): Promise<Otp | undef
   })
 }
 
-// Returns false when the OTP was already gone, e.g. used by a concurrent login.
 export function deleteOtp(id: number): Promise<boolean> {
   return query('Failed to delete OTP', async () => {
     const { meta } = await env.BHANDAR_DB.prepare('DELETE FROM otp WHERE id = ?').bind(id).run()

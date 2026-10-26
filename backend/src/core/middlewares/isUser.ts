@@ -2,19 +2,10 @@
 import { env } from 'cloudflare:workers'
 import { getCookie } from 'hono/cookie'
 import { createMiddleware } from 'hono/factory'
-import { AuthUtilsError, type TokenUser, verifyToken } from '../../modules/auth/utils'
+import { type TokenUser, verifyToken } from '../../modules/auth/utils'
+import { AuthUtilsError } from '../../modules/auth/utils.error'
 import type { IsUserEnv } from './isUser.types'
-
-export class IsUserError extends Error {
-  constructor(
-    message: string,
-    readonly status: 401 | 500,
-    options?: ErrorOptions,
-  ) {
-    super(message, options)
-    this.name = 'IsUserError'
-  }
-}
+import { IsUserError } from './isUser.error'
 
 export const isUser = createMiddleware<IsUserEnv>(async (c, next) => {
   const token = getCookie(c, env.COOKIE_NAME)

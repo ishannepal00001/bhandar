@@ -1,21 +1,13 @@
 // auth: business logic
+// login(): The code is deleted last, so a failed login doesn't use it up.
 import { env } from 'cloudflare:workers'
 import type { LoginRequest, SendOtpRequest } from '../../../../schemas/auth'
 import * as authModel from './model'
-import { AuthModelError } from './model'
-import type { AuthServiceErrorKind, LoginResult, SendOtpResult, User } from './type'
-import { AuthUtilsError, generateOtp, hashCode, sendOtpMail, signToken, verifyPassword } from './utils'
-
-export class AuthServiceError extends Error {
-  constructor(
-    message: string,
-    readonly kind: AuthServiceErrorKind,
-    options?: ErrorOptions,
-  ) {
-    super(message, options)
-    this.name = 'AuthServiceError'
-  }
-}
+import { AuthModelError } from './model.error'
+import type { LoginResult, SendOtpResult, User } from './type'
+import { generateOtp, hashCode, sendOtpMail, signToken, verifyPassword } from './utils'
+import { AuthUtilsError } from './utils.error'
+import { AuthServiceError } from './service.error'
 
 async function fromModel<T>(run: () => Promise<T>): Promise<T> {
   try {
@@ -69,7 +61,6 @@ export async function login(input: LoginRequest): Promise<LoginResult> {
     throw new AuthServiceError(err.message, 'TOKEN_ERROR', { cause: err })
   }
 
-  // Delete last so a failed login doesn't use up the code.
   const deleted = await fromModel(() => authModel.deleteOtp(otp.id))
   if (!deleted) throw new AuthServiceError('Invalid code', 'INVALID_CODE')
   return { token }

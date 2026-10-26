@@ -1,9 +1,20 @@
-// downloads: the DownloadTracker Durable Object. One instance (DOWNLOAD_TRACKER_NAME) keeps the queued jobs,
-// polls Render every DOWNLOAD_POLL_SECONDS with an alarm, moves finished jobs to D1 and pushes them over SSE.
+// downloads: the DownloadTracker Durable Object. One instance (DOWNLOAD_TRACKER_NAME) talks to fetchr, keeps the queued
+// jobs, polls fetchr every DOWNLOAD_POLL_SECONDS with an alarm, moves finished jobs to D1 and pushes them over SSE.
+// CODE_KEY: Where the current fetchr code is kept.
+// DownloadTracker.start(): Queues the download on fetchr, starts tracking it and wakes the poller if it's asleep.
+// DownloadTracker.fetch(): SSE stream for one user; the route passes the user id in the x-user-id header.
+// DownloadTracker.fetchr(): Built on first use so a missing DOWNLOADER_* binding fails that request, not the SSE
+//   stream. The rolling code lives in this object's storage, so it survives restarts.
+// DownloadTracker.finish(): Stores the job in D1 first; if that fails the job stays tracked and the next alarm tries
+//   again.
+// DownloadTracker.startHeartbeat(): Comment lines keep idle connections from being dropped by proxies.
+// giveUp(): Used when fetchr can't be reached DOWNLOAD_MAX_POLL_FAILURES times in a row.
 import { DurableObject, env } from 'cloudflare:workers'
+import { Fetchr } from '../../core/middlewares/fetchr'
+import { FetchrError } from '../../core/middlewares/fetchr.error'
 import { insertDownload } from './model'
-import type { DownloadEvent, FinishedJob, QueuedJob } from './type'
-import { getJob } from './utils'
+import type { DownloadEvent, FinishedJob, QueuedJob, StartResult } from './type'
+import { createJob, getJob, toJob } from './utils'
 
 type TrackedJob = QueuedJob & {
   user_id: number
@@ -15,11 +26,14 @@ type Stream = {
   writer: WritableStreamDefaultWriter<Uint8Array>
 }
 
+const CODE_KEY = 'fetchr_code'
+
 const encoder = new TextEncoder()
 
 export class DownloadTracker extends DurableObject<Env> {
   private readonly streams = new Set<Stream>()
   private heartbeat: ReturnType<typeof setInterval> | undefined
+  private client: Fetchr | undefined
 
   constructor(ctx: DurableObjectState, env: Env) {
     super(ctx, env)
@@ -29,23 +43,29 @@ export class DownloadTracker extends DurableObject<Env> {
         user_id INTEGER NOT NULL,
         source_url TEXT NOT NULL,
         created_at TEXT NOT NULL,
-        next_code TEXT NOT NULL,
         failures INTEGER NOT NULL DEFAULT 0
       )
     `)
   }
 
-  // Starts tracking a job Render has just queued, and wakes the poller if it's asleep.
-  async track(userId: number, job: QueuedJob): Promise<void> {
+  async start(userId: number, url: string): Promise<StartResult> {
+    let job
+    try {
+      job = toJob(await createJob(this.fetchr(), url))
+    } catch (err) {
+      if (!(err instanceof FetchrError)) throw err
+      return { error: err.message }
+    }
+
     this.ctx.storage.sql.exec(
-      'INSERT OR IGNORE INTO jobs (id, user_id, source_url, created_at, next_code) VALUES (?, ?, ?, ?, ?)',
+      'INSERT OR IGNORE INTO jobs (id, user_id, source_url, created_at) VALUES (?, ?, ?, ?)',
       job.id,
       userId,
       job.source_url,
       job.created_at,
-      job.next_code,
     )
     if ((await this.ctx.storage.getAlarm()) === null) await this.scheduleNextPoll()
+    return { job: { id: job.id, source_url: job.source_url, status: 'queued', created_at: job.created_at } }
   }
 
   listQueued(userId: number): QueuedJob[] {
@@ -55,7 +75,6 @@ export class DownloadTracker extends DurableObject<Env> {
       .map(toQueuedJob)
   }
 
-  // SSE stream for one user; the route passes the user id in the x-user-id header.
   async fetch(request: Request): Promise<Response> {
     const userId = Number(request.headers.get('x-user-id'))
     const { readable, writable } = new TransformStream<Uint8Array, Uint8Array>()
@@ -78,10 +97,18 @@ export class DownloadTracker extends DurableObject<Env> {
     if (left > 0) await this.scheduleNextPoll()
   }
 
+  private fetchr(): Fetchr {
+    this.client ??= new Fetchr(this.env, {
+      get: () => this.ctx.storage.kv.get<string>(CODE_KEY),
+      put: (code) => this.ctx.storage.kv.put(CODE_KEY, code),
+    })
+    return this.client
+  }
+
   private async poll(job: TrackedJob): Promise<void> {
     let result
     try {
-      result = await getJob(job.id, job.next_code)
+      result = toJob(await getJob(this.fetchr(), job.id))
     } catch (err) {
       const failures = job.failures + 1
       if (failures < env.DOWNLOAD_MAX_POLL_FAILURES) {
@@ -94,17 +121,15 @@ export class DownloadTracker extends DurableObject<Env> {
     }
 
     if (result.status === 'queued') {
-      this.ctx.storage.sql.exec('UPDATE jobs SET next_code = ?, failures = 0 WHERE id = ?', result.next_code, job.id)
+      this.ctx.storage.sql.exec('UPDATE jobs SET failures = 0 WHERE id = ?', job.id)
       return
     }
     await this.finish(job.user_id, result)
   }
 
-  // Stores the job in D1 first; if that fails the job stays tracked and the next alarm tries again.
   private async finish(userId: number, job: FinishedJob): Promise<void> {
-    const { next_code: _, ...row } = job
     try {
-      await insertDownload({ ...row, user_id: userId })
+      await insertDownload({ ...job, user_id: userId })
     } catch (err) {
       console.error(err)
       return
@@ -137,7 +162,6 @@ export class DownloadTracker extends DurableObject<Env> {
     }
   }
 
-  // Comment lines keep idle connections from being dropped by proxies.
   private startHeartbeat(): void {
     if (this.heartbeat !== undefined) return
     this.heartbeat = setInterval(() => {
@@ -151,10 +175,9 @@ export class DownloadTracker extends DurableObject<Env> {
 }
 
 function toQueuedJob(job: TrackedJob): QueuedJob {
-  return { id: job.id, source_url: job.source_url, status: 'queued', created_at: job.created_at, next_code: job.next_code }
+  return { id: job.id, source_url: job.source_url, status: 'queued', created_at: job.created_at }
 }
 
-// Used when Render can't be reached DOWNLOAD_MAX_POLL_FAILURES times in a row.
 function giveUp(job: TrackedJob, error: string): FinishedJob {
   return {
     id: job.id,
@@ -167,6 +190,5 @@ function giveUp(job: TrackedJob, error: string): FinishedJob {
     error,
     created_at: job.created_at,
     updated_at: new Date().toISOString(),
-    next_code: null,
   }
 }

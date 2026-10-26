@@ -3,22 +3,11 @@ import { env } from 'cloudflare:workers'
 import { Hono } from 'hono'
 import type { Context } from 'hono'
 import { setCookie } from 'hono/cookie'
-import type { ContentfulStatusCode } from 'hono/utils/http-status'
 import * as authController from '../../modules/auth/controller'
-import { AuthControllerError } from '../../modules/auth/controller'
+import { AuthControllerError } from '../../modules/auth/controller.error'
 import { tokenTtlSeconds } from '../../modules/auth/utils'
 import { rateLimit } from '../../core/middlewares/rateLimit'
-
-export class AuthRouteError extends Error {
-  constructor(
-    message: string,
-    readonly status: ContentfulStatusCode,
-    readonly issues?: Partial<Record<string, string[]>>,
-  ) {
-    super(message)
-    this.name = 'AuthRouteError'
-  }
-}
+import { AuthRouteError } from './auth.error'
 
 async function readJson(c: Context): Promise<unknown> {
   return c.req.json().catch(() => {
