@@ -87,10 +87,10 @@ All configuration is in `backend/wrangler.jsonc`; there is no `config.ts` or `.e
 | `vars` | `COOKIE_NAME`, `COOKIE_SECURE`, `COOKIE_SAME_SITE` | The auth cookie |
 | `vars` | `SMTP_HOST`, `SMTP_PORT`, `SMTP_USER`, `MAIL_FROM` | SMTP server for login codes (port `465` uses TLS) |
 | `vars` | `B2_BUCKET`, `B2_ENDPOINT`, `B2_REGION`, `STORAGE_URL_TTL_SECONDS` | Backblaze B2 bucket, its S3 endpoint, and how long download links last |
-| `vars` | `DOWNLOADER_URL`, `DOWNLOADER_TIMEOUT_SECONDS` | The Render download service's origin (e.g. `https://bhandar-downloader.onrender.com`) and the per-request timeout |
+| `vars` | `DOWNLOADER_URL`, `DOWNLOADER_CLIENT_ID`, `DOWNLOADER_TIMEOUT_SECONDS` | The fetchr download service's origin (e.g. `https://bhandar-downloader.onrender.com`), the client id fetchr knows us by, and the per-request timeout |
 | `vars` | `DOWNLOAD_POLL_SECONDS`, `DOWNLOAD_MAX_POLL_FAILURES`, `DOWNLOAD_TRACKER_NAME`, `SSE_HEARTBEAT_SECONDS` | How often the tracker polls Render, how many failed polls in a row mark a job failed, the tracker instance's name, and the SSE keep-alive interval |
 | `vars` | `DOWNLOAD_ALLOWED_HOSTS` | Hosts a download link may use (Facebook and `fb.watch`) |
-| `secrets.required` | `JWT_SECRET`, `SMTP_PASS`, `B2_KEY_ID`, `B2_APP_KEY`, `DOWNLOADER_API_KEY` | Names only. Values go in `.dev.vars` locally and `bunx wrangler secret put <NAME>` when deployed; `wrangler deploy` fails if one is missing |
+| `secrets.required` | `JWT_SECRET`, `SMTP_PASS`, `B2_KEY_ID`, `B2_APP_KEY`, `DOWNLOADER_SEED_CODE` | Names only. Values go in `.dev.vars` locally and `bunx wrangler secret put <NAME>` when deployed; `wrangler deploy` fails if one is missing |
 | `d1_databases` | `BHANDAR_DB` → `bhandardb` | The database. Run `bunx wrangler d1 create bhandardb` once and put the printed id in `database_id` |
 | `durable_objects` | `DOWNLOAD_TRACKER` → `DownloadTracker` | The download poller (SQLite-backed, so it runs on the free plan) |
 | `ratelimits` | `SEND_OTP_LIMITER` 3/min, `LOGIN_LIMITER` 5/min, `API_LIMITER` 60/10s | Per-IP limits. Cloudflare counts them per location and approximately |
@@ -112,42 +112,15 @@ The Worker never handles video bytes. A Python service on Render runs `yt-dlp`, 
 
 1. `POST /api/v1/downloads` with a Facebook link. The Worker asks Render to queue it and returns `202` with the queued job right away, so the app stays usable while the download runs.
 2. The job is handed to the **DownloadTracker**, a Durable Object: a small stateful Worker that can keep storage and set alarms. There is one instance for the whole app, named by `DOWNLOAD_TRACKER_NAME`. Cloudflare starts it the first time it's addressed and unloads it when it's idle.
-3. While any job is queued, the tracker's alarm polls Render every `DOWNLOAD_POLL_SECONDS` (8 s), sending back the latest `next_code`.
+3. While any job is queued, the tracker's alarm polls fetchr every `DOWNLOAD_POLL_SECONDS` (8 s). Each request carries fetchr's current rolling code (`X-Fetchr-Code`), and each reply hands back the next one (`X-Fetchr-Next-Code`), which the tracker keeps in its storage.
 4. When Render reports `completed`, `failed` or `cancelled`, the tracker writes the job to the D1 `downloads` table, drops it from its own storage, and sends an SSE event named after the status to `GET /api/v1/downloads/events`. Nothing is sent while a job is queued. If Render can't be reached `DOWNLOAD_MAX_POLL_FAILURES` times in a row, the job is stored as `failed`.
 5. With no queued jobs left, the tracker stops setting alarms, so it holds nothing between downloads.
 
-A job looks like this, with fewer fields while queued (`id`, `source_url`, `status`, `created_at`, `next_code`):
-
-```json
-{
-  "id": "3f6c2a1e-…",
-  "source_url": "https://www.facebook.com/watch?v=…",
-  "status": "completed",
-  "title": "Some video",
-  "filename": "1234567890.mp4",
-  "content_type": "video/mp4",
-  "filesize": 48213374,
-  "error": null,
-  "created_at": "2026-10-24T14:00:00Z",
-  "updated_at": "2026-10-24T14:01:12Z",
-  "next_code": "…"
-}
-```
-
-`filename` is the B2 object key.
-
-### Render service contract
-
-Every request carries `Authorization: Bearer <DOWNLOADER_API_KEY>`.
-
-| Method | Path | Body | Response |
-|---|---|---|---|
-| POST | `/jobs` | `{ "url": string }` | `202` queued job |
-| GET | `/jobs/:id?code=<next_code>` | none | the job: queued with a new `next_code`, or final with every field |
+The full API reference is in [backend/API.md](backend/API.md): every endpoint's request and response shape, its error messages, the SSE stream, and the fetchr contract.
 
 ## API
 
-All routes are under `/api/v1`, and every `/downloads` route needs the auth cookie. Errors come back as `{ "error": "...", "issues"?: { field: [messages] } }`.
+All routes are under `/api/v1`, and every `/downloads` route needs the auth cookie. Errors come back as `{ "error": "...", "issues"?: { field: [messages] } }`. See [backend/API.md](backend/API.md) for the details.
 
 | Method | Path | Body | Response |
 |---|---|---|---|
@@ -160,147 +133,7 @@ All routes are under `/api/v1`, and every `/downloads` route needs the auth cook
 | GET | `/downloads/:id/file` | none | `{ "url": string }`, a presigned B2 link (completed jobs only) |
 | DELETE | `/downloads/:id` | none | `{ "deleted": true }`, removes the file from B2 and the row from D1 |
 
-### Request and response schemas
-
-Request bodies are checked by the zod builders in `schemas/` (`schemas/auth.ts`, `schemas/downloads.ts`). Job responses are checked against `fetchrDownloadSchema` in `backend/src/modules/downloads/utils.ts`.
-
-```ts
-// Shared types
-type QueuedJob = {
-  id: string                // Render job id, also the download id
-  source_url: string
-  status: 'queued'
-  created_at: string        // ISO 8601
-  next_code: string         // token for the next poll
-}
-
-type FinishedJob = {
-  id: string
-  source_url: string
-  status: 'completed' | 'failed' | 'cancelled'
-  title: string | null
-  filename: string | null   // B2 object key, set when completed
-  content_type: string | null
-  filesize: number | null   // bytes
-  error: string | null      // set when failed
-  created_at: string
-  updated_at: string
-  next_code: string | null  // null once finished
-}
-
-type Job = QueuedJob | FinishedJob   // tell them apart by status
-
-type ErrorResponse = {
-  error: string
-  issues?: Record<string, string[]>  // only on 400 validation errors, keyed by field
-}
-```
-
-#### `POST /auth/send-otp`
-```ts
-// Request
-{ password: string }  // at least PASSWORD_MIN_LENGTH (8) chars, with upper, lower, digit and symbol
-// 200
-{ sent: true }
-// 400, 401, 429, 500, 502 → ErrorResponse
-```
-
-#### `POST /auth/login`
-```ts
-// Request
-{ code: string }      // exactly OTP_LENGTH (6) digits; surrounding spaces are trimmed
-// 200, also sets the httpOnly bhandar_token cookie
-{ token: string }
-// 400, 401, 429, 500 → ErrorResponse
-```
-
-#### `POST /auth/logout`
-```ts
-// No body. 200, clears the cookie
-{ loggedOut: true }
-```
-
-#### `POST /downloads`
-```ts
-// Request
-{ url: string }       // http(s) URL whose host is in DOWNLOAD_ALLOWED_HOSTS
-// 202
-QueuedJob
-// 400 (invalid link), 401, 502 (Render unreachable or bad answer) → ErrorResponse
-```
-Example:
-```json
-// → { "url": "https://www.facebook.com/watch?v=1029384756" }
-// ← 202
-{
-  "id": "3f6c2a1e-8b4d-4c7a-9e2f-1d5b7c9a0e31",
-  "source_url": "https://www.facebook.com/watch?v=1029384756",
-  "status": "queued",
-  "created_at": "2026-10-24T14:00:00Z",
-  "next_code": "a1b2c3d4"
-}
-```
-
-#### `GET /downloads`
-```ts
-// 200: queued jobs first (newest first), then finished ones (newest first)
-Job[]
-// 401, 500 → ErrorResponse
-```
-
-#### `GET /downloads/events`
-A `text/event-stream`. It opens with a `: connected` comment and sends `: ping` every `SSE_HEARTBEAT_SECONDS`. It has one event per job, sent when the job reaches a final state:
-```
-event: completed            // or failed / cancelled
-data: <FinishedJob as JSON>
-```
-Example:
-```
-event: completed
-data: {"id":"3f6c2a1e-…","source_url":"https://www.facebook.com/watch?v=…","status":"completed","title":"Some video","filename":"3f6c2a1e-….mp4","content_type":"video/mp4","filesize":48213374,"error":null,"created_at":"2026-10-24T14:00:00Z","updated_at":"2026-10-24T14:01:12Z","next_code":null}
-```
-
-#### `GET /downloads/:id/file`
-```ts
-// 200: presigned link, valid for STORAGE_URL_TTL_SECONDS; the browser saves it under the title
-{ url: string }
-// 401, 404 (unknown id or file missing in B2), 409 (failed or cancelled), 502 (B2 error) → ErrorResponse
-```
-
-#### `DELETE /downloads/:id`
-```ts
-// 200: file removed from B2 (if any) and row from D1
-{ deleted: true }
-// 401, 404, 500, 502 → ErrorResponse
-```
-
-#### Render service
-```ts
-// POST /jobs
-// Request
-{ url: string }
-// 202
-QueuedJob
-
-// GET /jobs/:id?code=<next_code>
-// 200, while still running (with a new next_code for the next poll)
-QueuedJob
-// 200, once done
-FinishedJob
-```
-Any non-2xx status, timeout or response that doesn't match these shapes counts as a failed poll.
-
-`GET /health` (outside `/api`, not rate limited) returns `{ "status": "ok", "db": "ok" }`, or `503` with `"db": "unreachable"` when D1 can't be queried.
-
-| Status | Meaning |
-|---|---|
-| 400 | Body is not JSON or fails validation |
-| 429 | Too many requests from this IP |
-| 401 | Wrong password, wrong or expired code, or not logged in |
-| 404 | Download not found, or its file is missing from B2 |
-| 409 | The download has no file (it failed or was cancelled) |
-| 502 | The login email could not be sent, or Render or B2 failed |
-| 500 | Database or token error |
+`GET /health` (outside `/api`, not rate limited) returns `{ "status": "ok", "db": "ok" }`, or `503` with `"db": "unreachable"`.
 
 ## Scripts
 

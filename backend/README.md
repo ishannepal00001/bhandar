@@ -1,3 +1,3 @@
 # Bhandar backend
 
-Bun + Hono API for Bhandar. Setup, configuration and the API reference are in the [root README](../README.md).
+Bun + Hono API for Bhandar. Setup and configuration are in the [root README](../README.md); the API reference is in [API.md](API.md).
