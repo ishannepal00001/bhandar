@@ -1,3 +1,4 @@
+import { Link } from '@tanstack/react-router'
 import {
   ArrowRight,
   Download,
@@ -6,22 +7,38 @@ import {
   TriangleAlert,
   type LucideIcon,
 } from 'lucide-react'
-import CurrentProgress from '../components/Dashboard/CurrentProgress'
+import DownloadQueue from '../components/Downloads/DownloadQueue'
 import HeaderActions from '../components/HeaderActions'
 import Marquee from '../components/Marquee'
-import { current, recent, stats } from '../dummydata'
+import { jobs } from '../dummydata'
+import { muted, panel } from '../styles'
+import { formatBytes } from '../utils/format'
+import { isFinished, isQueued } from '../utils/jobs'
 
-const statIcons: Record<string, LucideIcon> = {
-  'Total Downloads': Download,
-  'Storage Used': HardDrive,
-  'In Progress': LoaderCircle,
-  Failed: TriangleAlert,
-}
-
-const panel = 'border border-primary/15 dark:border-night-primary/15'
-const muted = 'text-primary/60 dark:text-night-primary/60'
+type Stat = { label: string; value: string; note: string; icon: LucideIcon }
 
 function Dashboard() {
+  const queued = jobs.filter(isQueued)
+  const finished = jobs.filter(isFinished)
+  const completed = finished.filter((job) => job.status === 'completed')
+
+  const stats: Stat[] = [
+    { label: 'Downloads', value: String(completed.length), note: 'saved videos', icon: Download },
+    {
+      label: 'Storage Used',
+      value: formatBytes(completed.reduce((total, job) => total + (job.filesize ?? 0), 0)),
+      note: 'across saved videos',
+      icon: HardDrive,
+    },
+    { label: 'In Queue', value: String(queued.length), note: 'being downloaded', icon: LoaderCircle },
+    {
+      label: 'Failed',
+      value: String(finished.length - completed.length),
+      note: 'failed or cancelled',
+      icon: TriangleAlert,
+    },
+  ]
+
   return (
     <div className="min-h-screen bg-background text-primary dark:bg-night-background dark:text-night-primary">
       <main className="mx-auto max-w-7xl space-y-6 px-4 py-6 sm:space-y-8 sm:px-6 sm:py-8">
@@ -36,60 +53,53 @@ function Dashboard() {
         </div>
 
         <section className="flex flex-col gap-3 sm:grid sm:grid-cols-2 sm:gap-4 lg:grid-cols-4">
-          {stats.map((stat) => {
-            const Icon = statIcons[stat.label]
-            const change = (
-              <>
-                <span className="font-semibold text-accent dark:text-night-accent">
-                  {stat.change}
-                </span>{' '}
-                {stat.note}
-              </>
-            )
-            return (
-              <div key={stat.label} className={panel}>
-                {/* Mobile: one full-width row per stat */}
-                <div className="flex items-center justify-between gap-4 p-4 sm:hidden">
-                  <div className="flex min-w-0 items-center gap-3">
-                    <span className="flex h-10 w-10 shrink-0 items-center justify-center border border-primary/15 dark:border-night-primary/15">
-                      <Icon size={18} className={muted} />
-                    </span>
-                    <div className="min-w-0">
-                      <p className={`text-xs uppercase tracking-widest ${muted}`}>{stat.label}</p>
-                      <p className={`mt-0.5 text-xs ${muted}`}>{change}</p>
-                    </div>
-                  </div>
-                  <p className="shrink-0 font-serif text-2xl tabular-nums">{stat.value}</p>
-                </div>
-
-                {/* Larger screens: card grid */}
-                <div className="hidden p-5 sm:block">
-                  <div className="flex items-center justify-between">
-                    <p className={`text-xs uppercase tracking-widest ${muted}`}>{stat.label}</p>
+          {stats.map(({ label, value, note, icon: Icon }) => (
+            <div key={label} className={panel}>
+              {/* Mobile: one full-width row per stat */}
+              <div className="flex items-center justify-between gap-4 p-4 sm:hidden">
+                <div className="flex min-w-0 items-center gap-3">
+                  <span className="flex h-10 w-10 shrink-0 items-center justify-center border border-primary/15 dark:border-night-primary/15">
                     <Icon size={18} className={muted} />
+                  </span>
+                  <div className="min-w-0">
+                    <p className={`text-xs uppercase tracking-widest ${muted}`}>{label}</p>
+                    <p className={`mt-0.5 text-xs ${muted}`}>{note}</p>
                   </div>
-                  <p className="mt-2 font-serif text-3xl">{stat.value}</p>
-                  <p className={`mt-1 text-sm ${muted}`}>{change}</p>
                 </div>
+                <p className="shrink-0 font-serif text-2xl tabular-nums">{value}</p>
               </div>
-            )
-          })}
+
+              {/* Larger screens: card grid */}
+              <div className="hidden p-5 sm:block">
+                <div className="flex items-center justify-between">
+                  <p className={`text-xs uppercase tracking-widest ${muted}`}>{label}</p>
+                  <Icon size={18} className={muted} />
+                </div>
+                <p className="mt-2 font-serif text-3xl">{value}</p>
+                <p className={`mt-1 text-sm ${muted}`}>{note}</p>
+              </div>
+            </div>
+          ))}
         </section>
 
-        <CurrentProgress download={current} />
+        <DownloadQueue items={queued} />
 
         <section>
           <div className="flex items-center justify-between pb-4">
             <h2 className="font-serif text-xl">Recent Downloads</h2>
-            <button
-              type="button"
+            <Link
+              to="/downloads"
               className={`flex items-center gap-1 text-sm underline-offset-4 hover:underline ${muted}`}
             >
               View all
               <ArrowRight size={14} />
-            </button>
+            </Link>
           </div>
-          <Marquee items={recent} />
+          {finished.length === 0 ? (
+            <p className={`text-sm ${muted}`}>Finished downloads will show up here.</p>
+          ) : (
+            <Marquee items={finished.slice(0, 6)} />
+          )}
         </section>
       </main>
     </div>

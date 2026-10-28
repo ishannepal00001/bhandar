@@ -3,15 +3,23 @@ import DownloadForm from '../components/Downloads/DownloadForm'
 import DownloadQueue from '../components/Downloads/DownloadQueue'
 import HeaderActions from '../components/HeaderActions'
 import VideoCard from '../components/VideoCard'
-import { queue, recent } from '../dummydata'
+import { jobs } from '../dummydata'
+import { muted } from '../styles'
+import type { FinalStatus } from '../types/downloads'
+import { isFinished, isQueued, statusLabels } from '../utils/jobs'
 
-const filters = ['All', 'Done', 'Failed'] as const
-
-const muted = 'text-primary/60 dark:text-night-primary/60'
+const filters: { label: string; status: FinalStatus | null }[] = [
+  { label: 'All', status: null },
+  { label: statusLabels.completed, status: 'completed' },
+  { label: statusLabels.failed, status: 'failed' },
+  { label: statusLabels.cancelled, status: 'cancelled' },
+]
 
 function Downloads() {
-  const [filter, setFilter] = useState<(typeof filters)[number]>('All')
-  const videos = filter === 'All' ? recent : recent.filter((v) => v.status === filter)
+  const [filter, setFilter] = useState<FinalStatus | null>(null)
+  const queued = jobs.filter(isQueued)
+  const finished = jobs.filter(isFinished)
+  const videos = filter === null ? finished : finished.filter((job) => job.status === filter)
 
   return (
     <div className="min-h-screen bg-background text-primary dark:bg-night-background dark:text-night-primary">
@@ -28,34 +36,38 @@ function Downloads() {
 
         <DownloadForm />
 
-        <DownloadQueue items={queue} />
+        <DownloadQueue items={queued} />
 
         <section>
           <div className="flex flex-col gap-3 pb-4 sm:flex-row sm:items-center sm:justify-between">
             <h2 className="font-serif text-xl">All Downloads</h2>
             <div className="flex border border-primary/15 dark:border-night-primary/15">
-              {filters.map((f) => (
+              {filters.map(({ label, status }) => (
                 <button
-                  key={f}
+                  key={label}
                   type="button"
-                  onClick={() => setFilter(f)}
-                  aria-pressed={filter === f}
-                  className={`px-4 py-1.5 text-sm ${
-                    filter === f
+                  onClick={() => setFilter(status)}
+                  aria-pressed={filter === status}
+                  className={`flex-1 px-4 py-1.5 text-sm sm:flex-none ${
+                    filter === status
                       ? 'bg-primary text-background dark:bg-night-primary dark:text-night-background'
                       : `${muted} hover:text-primary dark:hover:text-night-primary`
                   }`}
                 >
-                  {f}
+                  {label}
                 </button>
               ))}
             </div>
           </div>
-          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
-            {videos.map((v) => (
-              <VideoCard key={v.id} video={v} />
-            ))}
-          </div>
+          {videos.length === 0 ? (
+            <p className={`text-sm ${muted}`}>No downloads here yet.</p>
+          ) : (
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
+              {videos.map((job) => (
+                <VideoCard key={job.id} job={job} />
+              ))}
+            </div>
+          )}
         </section>
       </main>
     </div>

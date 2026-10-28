@@ -1,48 +1,75 @@
-import { CircleAlert, CircleCheck } from 'lucide-react'
+import { Ban, CircleAlert, CircleCheck, Download, Film, Trash2 } from 'lucide-react'
+import { muted, panel } from '../styles'
+import type { FinishedJob } from '../types/downloads'
+import { formatBytes, formatDate } from '../utils/format'
+import { jobTitle, statusLabels } from '../utils/jobs'
 
-export type Video = {
-  id: string
-  title: string
-  quality: string
-  size: string
-  status: string
-  date: string
-  thumbnail: string
+const badges = {
+  completed: {
+    icon: CircleCheck,
+    className: 'border-primary/40 dark:border-night-primary/40',
+  },
+  failed: {
+    icon: CircleAlert,
+    className: 'border-accent text-accent dark:border-night-accent dark:text-night-accent',
+  },
+  cancelled: {
+    icon: Ban,
+    className: `border-primary/30 dark:border-night-primary/30 ${muted}`,
+  },
 }
 
-const muted = 'text-primary/60 dark:text-night-primary/60'
+const actionButton =
+  'bg-background p-1.5 text-primary/60 hover:text-primary dark:bg-night-background dark:text-night-primary/60 dark:hover:text-night-primary'
 
-function VideoCard({ video, className = '' }: { video: Video; className?: string }) {
+function VideoCard({
+  job,
+  actions = true,
+  className = '',
+}: {
+  job: FinishedJob
+  actions?: boolean
+  className?: string
+}) {
+  const title = jobTitle(job)
+  const badge = badges[job.status]
+  const BadgeIcon = badge.icon
+  const completed = job.status === 'completed'
+
   return (
-    <div className={`border border-primary/15 dark:border-night-primary/15 ${className}`}>
-      <div className="relative aspect-video bg-primary/10 dark:bg-night-primary/10">
-        <img
-          src={video.thumbnail}
-          alt=""
-          loading="lazy"
-          className="h-full w-full object-cover"
-        />
-        <span className="absolute left-2 top-2 bg-primary px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wider text-background dark:bg-night-background dark:text-night-primary">
-          {video.quality}
-        </span>
+    <div className={`${panel} ${className}`}>
+      <div className="relative flex aspect-video items-center justify-center bg-primary/10 dark:bg-night-primary/10">
+        <Film size={32} strokeWidth={1.5} className={muted} />
+        {actions && (
+          <div className="absolute right-2 top-2 flex gap-1">
+            {completed && (
+              <button type="button" aria-label="Save video" title="Save video" className={actionButton}>
+                <Download size={16} />
+              </button>
+            )}
+            <button type="button" aria-label="Delete" title="Delete" className={actionButton}>
+              <Trash2 size={16} />
+            </button>
+          </div>
+        )}
       </div>
       <div className="p-3">
-        <p className="truncate text-sm" title={video.title}>
-          {video.title}
+        <p className="truncate text-sm" title={title}>
+          {title}
         </p>
-        <div className="mt-2 flex items-center justify-between text-xs">
-          <span
-            className={
-              video.status === 'Done'
-                ? 'inline-flex items-center gap-1 border border-primary/40 px-2 py-0.5 dark:border-night-primary/40'
-                : 'inline-flex items-center gap-1 border border-accent px-2 py-0.5 text-accent dark:border-night-accent dark:text-night-accent'
-            }
-          >
-            {video.status === 'Done' ? <CircleCheck size={12} /> : <CircleAlert size={12} />}
-            {video.status}
+        {job.error && (
+          <p className={`mt-1 truncate text-xs ${muted}`} title={job.error}>
+            {job.error}
+          </p>
+        )}
+        <div className="mt-2 flex items-center justify-between gap-2 text-xs">
+          <span className={`inline-flex items-center gap-1 border px-2 py-0.5 ${badge.className}`}>
+            <BadgeIcon size={12} />
+            {statusLabels[job.status]}
           </span>
           <span className={`tabular-nums ${muted}`}>
-            {video.size} · {video.date}
+            {completed && `${formatBytes(job.filesize)} · `}
+            {formatDate(job.created_at)}
           </span>
         </div>
       </div>
