@@ -1,8 +1,13 @@
 // downloads: the DownloadTracker Durable Object. One instance (DOWNLOAD_TRACKER_NAME) talks to fetchr, keeps the queued
 // jobs, polls fetchr every DOWNLOAD_POLL_SECONDS with an alarm, moves finished jobs to D1 and pushes them over SSE.
 // CODE_KEY: Where the current fetchr code is kept.
+// DownloadTracker.starting: Starts waiting on fetchr. Counted against DOWNLOAD_MAX_QUEUED so two requests at once
+//   can't both take the last slot while the first is waiting on fetchr.
 // DownloadTracker.start(): Queues the download on fetchr, starts tracking it and wakes the poller if it's asleep.
+//   Refuses once DOWNLOAD_MAX_QUEUED downloads are queued or starting.
 // DownloadTracker.fetch(): SSE stream for one user; the route passes the user id in the x-user-id header.
+// DownloadTracker.alarm(): Polls at most DOWNLOAD_MAX_QUEUED jobs, oldest first. Unpolled jobs keep downloading on
+//   fetchr and are picked up on a later alarm.
 // DownloadTracker.fetchr(): Built on first use so a missing DOWNLOADER_* binding fails that request, not the SSE
 //   stream. The rolling code lives in this object's storage, so it survives restarts.
 // DownloadTracker.finish(): Stores the job in D1 first; if that fails the job stays tracked and the next alarm tries
@@ -25,6 +30,7 @@ export class DownloadTracker extends DurableObject<Env> {
   private readonly streams = new Set<Stream>()
   private heartbeat: ReturnType<typeof setInterval> | undefined
   private client: Fetchr | undefined
+  private starting = 0
 
   constructor(ctx: DurableObjectState, env: Env) {
     super(ctx, env)
@@ -40,12 +46,20 @@ export class DownloadTracker extends DurableObject<Env> {
   }
 
   async start(userId: number, url: string): Promise<StartResult> {
+    const { queued } = this.ctx.storage.sql.exec<{ queued: number }>('SELECT COUNT(*) AS queued FROM jobs').one()
+    if (queued + this.starting >= env.DOWNLOAD_MAX_QUEUED) {
+      return { kind: 'QUEUE_FULL', error: `${env.DOWNLOAD_MAX_QUEUED} downloads are already queued, wait for one to finish` }
+    }
+
+    this.starting++
     let job
     try {
       job = toJob(await createJob(this.fetchr(), url))
     } catch (err) {
       if (!(err instanceof FetchrError)) throw err
-      return { error: err.message }
+      return { kind: 'DOWNLOADER_ERROR', error: err.message }
+    } finally {
+      this.starting--
     }
 
     this.ctx.storage.sql.exec(
@@ -81,7 +95,9 @@ export class DownloadTracker extends DurableObject<Env> {
   }
 
   async alarm(): Promise<void> {
-    const jobs = this.ctx.storage.sql.exec<TrackedJob>('SELECT * FROM jobs').toArray()
+    const jobs = this.ctx.storage.sql
+      .exec<TrackedJob>('SELECT * FROM jobs ORDER BY created_at ASC LIMIT ?', env.DOWNLOAD_MAX_QUEUED)
+      .toArray()
     await Promise.all(jobs.map((job) => this.poll(job)))
 
     const { left } = this.ctx.storage.sql.exec<{ left: number }>('SELECT COUNT(*) AS left FROM jobs').one()

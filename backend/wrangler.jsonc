@@ -38,6 +38,9 @@
     "DOWNLOAD_MAX_POLL_FAILURES": 15,
     "DOWNLOAD_TRACKER_NAME": "downloads",
     "SSE_HEARTBEAT_SECONDS": 25,
+    // Most downloads queued at once; the tracker also polls at most this many per alarm. Keep it under 50, the
+    // subrequests one Workers Free invocation may make.
+    "DOWNLOAD_MAX_QUEUED": 10,
     "DOWNLOAD_ALLOWED_HOSTS": ["facebook.com", "www.facebook.com", "m.facebook.com", "web.facebook.com", "fb.watch"]
   },
 

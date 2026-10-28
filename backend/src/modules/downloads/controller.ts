@@ -11,6 +11,7 @@ import { DownloadsControllerError } from './controller.error'
 const statusByKind: Record<DownloadsServiceErrorKind, DownloadsControllerError['status']> = {
   NOT_FOUND: 404,
   NOT_COMPLETED: 409,
+  QUEUE_FULL: 429,
   DOWNLOADER_ERROR: 502,
   STORAGE_ERROR: 502,
   DB_ERROR: 500,

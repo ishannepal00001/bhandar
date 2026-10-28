@@ -40,7 +40,7 @@ function toFinishedJob({ user_id: _, ...download }: Download): FinishedJob {
 
 export async function start(userId: number, input: DownloadRequest): Promise<QueuedJob> {
   const result = await tracker().start(userId, input.url)
-  if ('error' in result) throw new DownloadsServiceError(result.error, 'DOWNLOADER_ERROR')
+  if ('error' in result) throw new DownloadsServiceError(result.error, result.kind)
   return result.job
 }
 
