@@ -90,6 +90,7 @@ All configuration is in `backend/wrangler.jsonc`; there is no `config.ts` or `.e
 | `vars` | `DOWNLOADER_URL`, `DOWNLOADER_CLIENT_ID`, `DOWNLOADER_TIMEOUT_SECONDS` | The fetchr download service's origin (e.g. `https://bhandar-downloader.onrender.com`), the client id fetchr knows us by, and the per-request timeout |
 | `vars` | `DOWNLOAD_POLL_SECONDS`, `DOWNLOAD_MAX_POLL_FAILURES`, `DOWNLOAD_TRACKER_NAME`, `SSE_HEARTBEAT_SECONDS` | How often the tracker polls Render, how many failed polls in a row mark a job failed, the tracker instance's name, and the SSE keep-alive interval |
 | `vars` | `DOWNLOAD_MAX_QUEUED` | Most downloads queued at once (`POST /downloads` returns `429` past it) and most jobs polled per alarm. Keep it under 50, the subrequests one Workers Free invocation may make |
+| `vars` | `DOWNLOAD_FILE_EXTENSION` | Added to a finished video's title when it's saved (`.mp4`) |
 | `vars` | `DOWNLOAD_ALLOWED_HOSTS` | Hosts a download link may use (Facebook and `fb.watch`) |
 | `secrets.required` | `JWT_SECRET`, `SMTP_PASS`, `B2_KEY_ID`, `B2_APP_KEY`, `DOWNLOADER_SEED_CODE` | Names only. Values go in `.dev.vars` locally and `bunx wrangler secret put <NAME>` when deployed; `wrangler deploy` fails if one is missing |
 | `d1_databases` | `BHANDAR_DB` → `bhandardb` | The database. Run `bunx wrangler d1 create bhandardb` once and put the printed id in `database_id` |

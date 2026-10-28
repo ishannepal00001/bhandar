@@ -1,6 +1,8 @@
 // downloads: business logic
 // start(): Hands the link to the tracker, which queues it on fetchr; the result arrives later over SSE.
 // remove(): Removes the B2 file (if any) before the row, so a failed delete can be retried.
+// saveAs(): The name the browser saves the file under: the title, or the key's file name without its extension, ending
+//   in DOWNLOAD_FILE_EXTENSION.
 import { env } from 'cloudflare:workers'
 import type { DownloadRequest } from '../../../../schemas/downloads'
 import { Storage } from '../../core/utils/storage'
@@ -54,6 +56,12 @@ export function events(userId: number, request: Request): Promise<Response> {
   return tracker().fetch(new Request(request.url, { headers, signal: request.signal }))
 }
 
+function saveAs(download: Download & { filename: string }): string {
+  const name = download.title ?? (download.filename.split('/').pop() ?? download.filename).replace(/\.[^.]+$/, '')
+  const extension = env.DOWNLOAD_FILE_EXTENSION
+  return name.toLowerCase().endsWith(extension.toLowerCase()) ? name : `${name}${extension}`
+}
+
 async function findCompleted(userId: number, id: string): Promise<Download & { filename: string }> {
   const download = await fromModel(() => downloadsModel.findDownload(userId, id))
   if (!download) throw new DownloadsServiceError('Download not found', 'NOT_FOUND')
@@ -65,7 +73,7 @@ async function findCompleted(userId: number, id: string): Promise<Download & { f
 
 export async function fileLink(userId: number, id: string): Promise<FileLinkResult> {
   const download = await findCompleted(userId, id)
-  const file = await fromStorage(() => new Storage(env).getFile(download.filename, download.title ?? download.filename))
+  const file = await fromStorage(() => new Storage(env).getFile(download.filename, saveAs(download)))
   return { url: file.url }
 }
 

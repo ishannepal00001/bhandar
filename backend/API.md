@@ -303,7 +303,7 @@ Errors: only the `isUser` ones, as plain JSON before the stream opens.
 
 ### `GET /api/v1/downloads/:id/file`
 
-Returns a short-lived presigned Backblaze B2 link for a completed download. The link is valid for `STORAGE_URL_TTL_SECONDS` (3600). It carries `Content-Disposition: attachment`, so opening it saves the file under the job's `title`, or under its key when there is no title.
+Returns a short-lived presigned Backblaze B2 link for a completed download. The link is valid for `STORAGE_URL_TTL_SECONDS` (3600). It carries `Content-Disposition: attachment`, so opening it saves the file as the job's `title` plus `DOWNLOAD_FILE_EXTENSION` (`.mp4`), e.g. `Some video.mp4`. Without a title, the key's file name is used.
 
 Path params: `id`, the job id.
 

@@ -41,6 +41,8 @@
     // Most downloads queued at once; the tracker also polls at most this many per alarm. Keep it under 50, the
     // subrequests one Workers Free invocation may make.
     "DOWNLOAD_MAX_QUEUED": 10,
+    // Added to the name a finished video is saved under (fetchr merges downloads into mp4).
+    "DOWNLOAD_FILE_EXTENSION": ".mp4",
     "DOWNLOAD_ALLOWED_HOSTS": ["facebook.com", "www.facebook.com", "m.facebook.com", "web.facebook.com", "fb.watch"]
   },
 
