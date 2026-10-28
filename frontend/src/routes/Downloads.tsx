@@ -1,9 +1,9 @@
 import { createRoute } from '@tanstack/react-router'
-import { rootRoute } from '../App'
 import DownloadsPage from '../pages/Downloads'
+import { layoutRoute } from './Layout'
 
-export const Downloads = createRoute({
-  getParentRoute: () => rootRoute,
+export const downloadsRoute = createRoute({
+  getParentRoute: () => layoutRoute,
   path: '/downloads',
   component: DownloadsPage,
 })

@@ -1,7 +1,6 @@
 import { LogIn } from 'lucide-react'
 import { useRef, useState } from 'react'
-
-const muted = 'text-primary/60 dark:text-night-primary/60'
+import { muted } from '../../styles'
 
 function CodeForm({
   length,

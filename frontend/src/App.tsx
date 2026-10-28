@@ -1,21 +1,14 @@
-import {
-  createRootRoute,
-  createRouter,
-  Navigate,
-  RouterProvider,
-} from '@tanstack/react-router'
-import Layout from './Layout'
-import { Auth } from './routes/Auth'
-import { Dashboard } from './routes/Dashboard'
-import { Downloads } from './routes/Downloads'
+import { createRouter, RouterProvider } from '@tanstack/react-router'
+import { authRoute } from './routes/Auth'
+import { dashboardRoute } from './routes/Dashboard'
+import { downloadsRoute } from './routes/Downloads'
+import { layoutRoute } from './routes/Layout'
+import { rootRoute } from './routes/root'
 
-export const rootRoute = createRootRoute({
-  component: Layout,
-  // Send any unmatched path back to the index route.
-  notFoundComponent: () => <Navigate to="/" replace />,
-})
-
-const routeTree = rootRoute.addChildren([Dashboard, Downloads, Auth])
+const routeTree = rootRoute.addChildren([
+  layoutRoute.addChildren([dashboardRoute, downloadsRoute]),
+  authRoute,
+])
 
 const router = createRouter({ routeTree })
 

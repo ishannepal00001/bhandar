@@ -1,6 +1,5 @@
 import { Check } from 'lucide-react'
-
-const muted = 'text-primary/60 dark:text-night-primary/60'
+import { muted } from '../../styles'
 
 function Stepper({ steps, current }: { steps: readonly string[]; current: number }) {
   return (

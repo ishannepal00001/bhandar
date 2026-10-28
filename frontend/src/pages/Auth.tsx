@@ -1,12 +1,11 @@
 import { useState } from 'react'
-import CodeForm from '../components/auth/CodeForm'
-import PasswordForm from '../components/auth/PasswordForm'
-import Stepper from '../components/auth/Stepper'
+import CodeForm from '../components/Auth/CodeForm'
+import PasswordForm from '../components/Auth/PasswordForm'
+import Stepper from '../components/Auth/Stepper'
 import { config } from '../config'
+import { muted } from '../styles'
 
 const steps = ['Password', 'Code'] as const
-
-const muted = 'text-primary/60 dark:text-night-primary/60'
 
 function Auth() {
   const [step, setStep] = useState(0)

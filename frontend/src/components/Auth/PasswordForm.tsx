@@ -1,7 +1,6 @@
 import { ArrowRight, Eye, EyeOff, KeyRound } from 'lucide-react'
 import { useState } from 'react'
-
-const muted = 'text-primary/60 dark:text-night-primary/60'
+import { muted } from '../../styles'
 
 function PasswordForm({ onSubmit }: { onSubmit: (password: string) => void }) {
   const [password, setPassword] = useState('')
