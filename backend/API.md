@@ -185,6 +185,8 @@ Every route here runs the `isUser` middleware first, and only sees the logged-in
 
 The flow: `POST /downloads` returns a queued job right away. The `DownloadTracker` polls fetchr every `DOWNLOAD_POLL_SECONDS` (8). When the job finishes, the tracker stores it in D1 and pushes it to `GET /downloads/events`. Then `GET /downloads/:id/file` gives a link to the video.
 
+**Queue cap.** At most `DOWNLOAD_MAX_QUEUED` (10) downloads can be queued at once. Jobs whose fetchr call hasn't returned yet count too, so two requests sent together can't both take the last slot. Past the cap, `POST /downloads` returns `429` until a job finishes. Each alarm also polls at most `DOWNLOAD_MAX_QUEUED` jobs, oldest first, so one run stays under the 50 subrequests a Workers Free invocation may make. Keep the value below 50.
+
 ### `POST /api/v1/downloads`
 
 Queues a Facebook video on fetchr.
@@ -226,6 +228,7 @@ Errors:
 | 400 | `Body must be valid JSON` | Body isn't JSON |
 | 400 | `Invalid request` | `issues.url` holds `Enter a valid link` or `Only Facebook video links are supported` |
 | 401 / 500 | see `isUser` above | |
+| 429 | `10 downloads are already queued, wait for one to finish` | `DOWNLOAD_MAX_QUEUED` jobs are queued or starting (the number is the configured cap) |
 | 502 | `Download service is not configured` | `DOWNLOADER_URL`, `DOWNLOADER_CLIENT_ID` or `DOWNLOADER_SEED_CODE` is empty |
 | 502 | `Download service is unreachable` | Network error or no reply within `DOWNLOADER_TIMEOUT_SECONDS` (15) |
 | 502 | `Download service answered <status>` | fetchr returned a non-2xx status |
@@ -352,7 +355,7 @@ Errors:
 | 401 | Wrong password or code, or not logged in or session expired |
 | 404 | Route, download or B2 file not found |
 | 409 | The download has no file (failed or cancelled) |
-| 429 | Rate limited (`Too many requests, try again in a minute`) |
+| 429 | Rate limited (`Too many requests, try again in a minute`), or the download queue is full |
 | 500 | D1, JWT, or an error the code doesn't expect (`Something went wrong`) |
 | 502 | SMTP, fetchr or B2 failed |
 | 503 | `/health` only: D1 unreachable |
@@ -393,4 +396,4 @@ A fetchr download (`fetchrDownloadSchema` in `modules/downloads/utils.ts`):
 }
 ```
 
-A poll fails on any non-2xx status, timeout, missing next code, or reply that doesn't match this shape. A failed poll is retried on the next alarm, up to `DOWNLOAD_MAX_POLL_FAILURES` times in a row.
+Each alarm polls at most `DOWNLOAD_MAX_QUEUED` jobs. A poll fails on any non-2xx status, timeout, missing next code, or reply that doesn't match this shape. A failed poll is retried on the next alarm, up to `DOWNLOAD_MAX_POLL_FAILURES` times in a row.

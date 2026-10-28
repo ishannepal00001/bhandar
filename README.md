@@ -89,6 +89,7 @@ All configuration is in `backend/wrangler.jsonc`; there is no `config.ts` or `.e
 | `vars` | `B2_BUCKET`, `B2_ENDPOINT`, `B2_REGION`, `STORAGE_URL_TTL_SECONDS` | Backblaze B2 bucket, its S3 endpoint, and how long download links last |
 | `vars` | `DOWNLOADER_URL`, `DOWNLOADER_CLIENT_ID`, `DOWNLOADER_TIMEOUT_SECONDS` | The fetchr download service's origin (e.g. `https://bhandar-downloader.onrender.com`), the client id fetchr knows us by, and the per-request timeout |
 | `vars` | `DOWNLOAD_POLL_SECONDS`, `DOWNLOAD_MAX_POLL_FAILURES`, `DOWNLOAD_TRACKER_NAME`, `SSE_HEARTBEAT_SECONDS` | How often the tracker polls Render, how many failed polls in a row mark a job failed, the tracker instance's name, and the SSE keep-alive interval |
+| `vars` | `DOWNLOAD_MAX_QUEUED` | Most downloads queued at once (`POST /downloads` returns `429` past it) and most jobs polled per alarm. Keep it under 50, the subrequests one Workers Free invocation may make |
 | `vars` | `DOWNLOAD_ALLOWED_HOSTS` | Hosts a download link may use (Facebook and `fb.watch`) |
 | `secrets.required` | `JWT_SECRET`, `SMTP_PASS`, `B2_KEY_ID`, `B2_APP_KEY`, `DOWNLOADER_SEED_CODE` | Names only. Values go in `.dev.vars` locally and `bunx wrangler secret put <NAME>` when deployed; `wrangler deploy` fails if one is missing |
 | `d1_databases` | `BHANDAR_DB` → `bhandardb` | The database. Run `bunx wrangler d1 create bhandardb` once and put the printed id in `database_id` |
@@ -110,7 +111,7 @@ Passwords must be at least `PASSWORD_MIN_LENGTH` (8) characters and include an u
 
 The Worker never handles video bytes. A Python service on Render runs `yt-dlp`, uploads the file to B2 with its own credentials, and reports back when asked.
 
-1. `POST /api/v1/downloads` with a Facebook link. The Worker asks Render to queue it and returns `202` with the queued job right away, so the app stays usable while the download runs.
+1. `POST /api/v1/downloads` with a Facebook link. The Worker asks Render to queue it and returns `202` with the queued job right away, so the app stays usable while the download runs. At most `DOWNLOAD_MAX_QUEUED` (10) can be queued at once; past that it returns `429`.
 2. The job is handed to the **DownloadTracker**, a Durable Object: a small stateful Worker that can keep storage and set alarms. There is one instance for the whole app, named by `DOWNLOAD_TRACKER_NAME`. Cloudflare starts it the first time it's addressed and unloads it when it's idle.
 3. While any job is queued, the tracker's alarm polls fetchr every `DOWNLOAD_POLL_SECONDS` (8 s). Each request carries fetchr's current rolling code (`X-Fetchr-Code`), and each reply hands back the next one (`X-Fetchr-Next-Code`), which the tracker keeps in its storage.
 4. When Render reports `completed`, `failed` or `cancelled`, the tracker writes the job to the D1 `downloads` table, drops it from its own storage, and sends an SSE event named after the status to `GET /api/v1/downloads/events`. Nothing is sent while a job is queued. If Render can't be reached `DOWNLOAD_MAX_POLL_FAILURES` times in a row, the job is stored as `failed`.
