@@ -26,6 +26,7 @@ This README covers the whole project: how the backend and frontend are built, ho
   - [Layout and navigation](#layout-and-navigation)
   - [Pages](#pages)
   - [Components](#components)
+  - [Clip editor](#clip-editor)
   - [State](#state)
   - [Data and types](#data-and-types)
   - [Styling and theme](#styling-and-theme)
@@ -41,6 +42,7 @@ This README covers the whole project: how the backend and frontend are built, ho
 | Backend: downloads | Done on the Worker side. Queues jobs on fetchr, polls them from a Durable Object, stores finished ones in D1, pushes them over SSE, serves B2 links, deletes |
 | fetchr (Python `yt-dlp` service on Render) | **Not built yet.** Its contract is defined in [backend/API.md](backend/API.md#upstream-fetchr). Until it exists, no video actually downloads |
 | Frontend: UI | Done. Login page, dashboard, downloads page, queue, download modal, collapsible sidebar, light and dark themes |
+| Frontend: editing | UI only. The Editing page opens an uploaded file in a full-screen video.js player with a clip toolbar. Clips aren't cut or saved, and "Use downloads" does nothing yet |
 | Frontend: API calls | **Not wired up.** No component calls the backend yet; the pages render `src/dummydata.ts` and the forms don't submit anywhere |
 
 ## Architecture
@@ -68,7 +70,7 @@ The Worker never touches video bytes. fetchr downloads the video and uploads it 
 | Part | Tech |
 |---|---|
 | Backend | [Hono](https://hono.dev) on [Cloudflare Workers](https://developers.cloudflare.com/workers/), D1 (its own `prepare().bind()` API, no query builder), a SQLite-backed Durable Object, Zod, Nodemailer (via `nodejs_compat`), aws4fetch for B2 |
-| Frontend | React 19, Vite, TanStack Router, Zustand, Tailwind CSS v3, lucide-react, oxlint |
+| Frontend | React 19, Vite, TanStack Router, Zustand, Tailwind CSS v3, lucide-react, [Video.js 10](https://videojs.org) (`@videojs/react`, pinned to 10.2.0), oxlint |
 | Shared | Zod request-schema builders in `schemas/`, used by the backend and meant for the frontend |
 | External | fetchr, a Python service on Render running `yt-dlp` + `ffmpeg`; Backblaze B2 for storage; an SMTP server for login codes |
 | Tooling | Bun 1.3+ as the package manager and test runner, Wrangler for running and deploying the Worker |
@@ -111,7 +113,8 @@ bhandar/
         ├── main.tsx, App.tsx    React root and router
         ├── Layout.tsx           sidebar + mobile header + download modal around the app pages
         ├── routes/              one TanStack route per file
-        ├── pages/               Auth, Dashboard, Downloads
+        ├── pages/               Auth, Dashboard, Downloads, Editing
+        ├── editor/              clip editor: video.js player + clip toolbar, exported from index.ts
         ├── components/          Sidebar, Modal, Marquee, VideoCard, HeaderActions, Auth/*, Downloads/*
         ├── stores/              Zustand stores (sidebar, download modal)
         ├── hooks/               useMediaQuery
@@ -314,7 +317,8 @@ Routes are built with TanStack Router in code, one route per file in `src/routes
 rootRoute                       Outlet; any unknown path redirects to /
 ├── layoutRoute (id: "app")     pathless; wraps pages in Layout
 │   ├── /            Dashboard
-│   └── /downloads   Downloads
+│   ├── /downloads   Downloads
+│   └── /editing     Editing
 └── /auth            Auth (outside the layout, full screen)
 ```
 
@@ -324,7 +328,7 @@ The router type is registered with TanStack's `Register` interface, so `<Link to
 
 `Layout.tsx` wraps the app pages:
 
-- **Sidebar** (`components/Sidebar.tsx`). On desktop (≥ 768px) it's sticky and can collapse to a narrow icon rail; the collapsed setting is remembered in `localStorage`. On mobile it's an off-canvas drawer opened from the header's menu button, closed by the backdrop, the close button or Escape, and it locks page scroll while open. It links to Dashboard and Downloads, shows placeholders for the upcoming Editing, History and Settings sections, and has a Download button that opens the download modal.
+- **Sidebar** (`components/Sidebar.tsx`). On desktop (≥ 768px) it's sticky and can collapse to a narrow icon rail; the collapsed setting is remembered in `localStorage`. On mobile it's an off-canvas drawer opened from the header's menu button, closed by the backdrop, the close button or Escape, and it locks page scroll while open. It links to Dashboard, Downloads and Editing, shows placeholders for the upcoming History and Settings sections, and has a Download button that opens the download modal.
 - **Mobile header.** A sticky bar with the app name and the menu button, shown below 768px.
 - **Download modal** (`components/Modal.tsx`). Holds the `DownloadForm`. It closes on Escape or a click on the backdrop, and locks page scroll while open.
 
@@ -335,6 +339,7 @@ The router type is registered with TanStack's `Register` interface, so `<Link to
 | Auth | `/auth` | A two-step login: `PasswordForm`, then `CodeForm`. A `Stepper` shows progress and each step slides in from the side it came from (turned off for reduced motion) |
 | Dashboard | `/` | Header actions; four stats computed from the jobs (saved videos, storage used, number queued, failed or cancelled); the queue; a scrolling marquee of the six most recent finished downloads, with a link to the downloads page |
 | Downloads | `/downloads` | Header actions; the download form; the queue; every finished download in a grid, filterable by All / Done / Failed / Cancelled |
+| Editing | `/editing` | A centred title, short description, and two buttons: **Use downloads** (not wired yet) and **Upload videos**, which opens a file picker and shows the chosen file in the [clip editor](#clip-editor) |
 
 ### Components
 
@@ -349,6 +354,33 @@ The router type is registered with TanStack's `Register` interface, so `<Link to
 | `Marquee` | Endless horizontal scroll of `VideoCard`s that pauses on hover and stops for reduced motion |
 | `HeaderActions` | "Create download" (opens the modal) and "Create clip" buttons |
 | `Modal` | Accessible dialog with a title, close button, Escape and backdrop handling |
+
+### Clip editor
+
+Everything for editing lives in `src/editor/`, and pages import it from `src/editor/index.ts` (`import { Editor } from '../editor'`).
+
+| File | Does |
+|---|---|
+| `Editor.tsx` | Covers the whole viewport over the app on a black background and renders the Video.js player (`VideoPlayer`, `VideoSkin`, `Video` from `@videojs/react/video`). The video is scaled to fit. The player's own fullscreen button still works |
+| `ClipToolbar.tsx` | Floats over the top left of the video, with a close button at the top right. It's a child of the skin, so it sits inside the player's container: it stays on screen in native fullscreen and fades in and out with the player's controls (`controlsVisible`) |
+| `format.ts` | Formats times as `m:ss.s` or `h:mm:ss.s` |
+| `index.ts` | Exports `Editor` |
+
+The toolbar has one button that walks through a clip:
+
+| Button shows | Pressing it | Then shows |
+|---|---|---|
+| **Create clip** (first time only) | starts clipping | Start clip |
+| **Start clip** | marks the start at the current playback time | End clip |
+| **End clip** | marks the end and completes the clip | Start clip, for the next one |
+
+Next to the button, a readout shows `From <start>` while you choose the end, then the last clip's range. Pressing End at or before the start shows a warning and stays on End clip. Clips aren't saved or cut anywhere yet.
+
+The chosen file plays from an object URL in the browser, nothing is uploaded, and the URL is freed when the editor closes.
+
+**Theming the player.** The packaged skin's public settings set the accent to the app's gold, square corners, no border and the app font. Its internal variables, which aren't a documented API, give the control bar, menus and popups the app background and text colours, square corners, and no blur, gradient or shadow. Because of those internal variables, `@videojs/react` is pinned to exactly `10.2.0`; check the player after any upgrade. Two pieces may still render rounded: the seek slider's track outline and its drag handle.
+
+**Loading the skin CSS.** The skin stylesheet uses native CSS `@layer` rules, which Tailwind v3 rejects at build time. `Editor.tsx` imports it with `?raw`, which skips the CSS pipeline, and renders it in a React 19 `<style href precedence>` tag so it's added to the page head once.
 
 ### State
 
