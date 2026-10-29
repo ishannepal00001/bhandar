@@ -3,7 +3,10 @@
 // hashPassword(): SHA-256(salt + password) with a random salt.
 // hashCode(): Unsalted so a code can be looked up by its hash; codes are single use and short-lived.
 // verifyToken(): Returns undefined for a bad, tampered or expired token; throws only when the secret is missing.
+// sendOtpMail(): On port 465 it opens the TLS socket itself by hostname. Nodemailer would resolve the host to an IP
+//   first, and Workers checks the certificate against the address it connects to, so Gmail's cert fails on its IP.
 import { randomInt } from 'node:crypto'
+import tls from 'node:tls'
 import { sign, verify } from 'hono/jwt'
 import nodemailer from 'nodemailer'
 import { env } from 'cloudflare:workers'
@@ -19,11 +22,22 @@ export async function sendOtpMail(to: string, code: string): Promise<void> {
   const { SMTP_HOST: host, SMTP_PORT: port, SMTP_USER: user, SMTP_PASS: pass, MAIL_FROM: from } = env
   if (!host || !user || !pass || !from) throw new AuthUtilsError('Mail is not configured')
 
+  const secure = port === 465
   const transport = nodemailer.createTransport({
     host,
     port,
-    secure: port === 465,
+    secure,
     auth: { user, pass },
+    getSocket: secure
+      ? (_options, callback) => {
+          const onError = (err: Error) => callback(err)
+          const socket = tls.connect({ host, port, servername: host }, () => {
+            socket.off('error', onError)
+            callback(null, { connection: socket, secured: true })
+          })
+          socket.once('error', onError)
+        }
+      : undefined,
   })
 
   try {
