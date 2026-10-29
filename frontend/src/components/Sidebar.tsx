@@ -16,12 +16,10 @@ import { useSidebarStore } from '../stores/useSidebarStore'
 const links = [
   { to: '/', label: 'Dashboard', icon: LayoutDashboard },
   { to: '/downloads', label: 'Downloads', icon: Download },
+  { to: '/editing', label: 'Editing', icon: Scissors },
 ] as const
 
-const upcoming = [
-  { label: 'Editing', icon: Scissors },
-  { label: 'History', icon: History },
-]
+const upcoming = [{ label: 'History', icon: History }]
 
 const item =
   'flex items-center gap-3 border-l-2 text-sm transition-colors'
