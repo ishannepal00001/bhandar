@@ -1,0 +1,77 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "bhandar-backend",
+  "main": "src/index.ts",
+  "compatibility_date": "2026-10-01",
+  "compatibility_flags": ["nodejs_compat"],
+  // ../schemas has no node_modules of its own; resolve its zod import from backend's.
+  "alias": { "zod": "./node_modules/zod" },
+
+  // wrangler dev regenerates worker-configuration.d.ts whenever this file changes.
+  "dev": { "generate_types": true },
+
+  // Every tunable value, read through the Worker bindings (`import { env } from 'cloudflare:workers'` or c.env).
+  "vars": {
+    "OTP_LENGTH": 6,
+    "OTP_TTL_MINUTES": 10,
+    "OTP_MAIL_SUBJECT": "Your Bhandar login code",
+    "PASSWORD_MIN_LENGTH": 8,
+    "PASSWORD_SALT_BYTES": 16,
+    "JWT_ALGORITHM": "HS256",
+    "JWT_TTL_DAYS": 7,
+    "COOKIE_NAME": "bhandar_token",
+    "COOKIE_SECURE": true,
+    "COOKIE_SAME_SITE": "Strict",
+    "SMTP_HOST": "",
+    "SMTP_PORT": 465,
+    "SMTP_USER": "",
+    "MAIL_FROM": "",
+    "B2_BUCKET": "bhandar.bucket",
+    "B2_ENDPOINT": "https://s3.us-east-005.backblazeb2.com",
+    "B2_REGION": "us-east-005",
+    "STORAGE_URL_TTL_SECONDS": 3600,
+    // The fetchr download service, the client id it knows us by, and how the DownloadTracker polls it.
+    "DOWNLOADER_URL": "http://127.0.0.1:8000",
+    "DOWNLOADER_CLIENT_ID": "my-client",
+    "DOWNLOADER_TIMEOUT_SECONDS": 15,
+    "DOWNLOAD_POLL_SECONDS": 8,
+    "DOWNLOAD_MAX_POLL_FAILURES": 15,
+    "DOWNLOAD_TRACKER_NAME": "downloads",
+    "SSE_HEARTBEAT_SECONDS": 25,
+    // Most downloads queued at once; the tracker also polls at most this many per alarm. Keep it under 50, the
+    // subrequests one Workers Free invocation may make.
+    "DOWNLOAD_MAX_QUEUED": 10,
+    // Added to the name a finished video is saved under (fetchr merges downloads into mp4).
+    "DOWNLOAD_FILE_EXTENSION": ".mp4",
+    "DOWNLOAD_ALLOWED_HOSTS": ["facebook.com", "www.facebook.com", "m.facebook.com", "web.facebook.com", "fb.watch"],
+    // Secrets. Copy this file to wrangler.jsonc (gitignored) and fill them in.
+    "JWT_SECRET": "",
+    "SMTP_PASS": "",
+    "B2_KEY_ID": "",
+    "B2_APP_KEY": "",
+    "DOWNLOADER_SEED_CODE": ""
+  },
+
+  "d1_databases": [
+    {
+      "binding": "BHANDAR_DB",
+      "database_name": "bhandardb",
+      // Replace with the id printed by `wrangler d1 create bhandardb`.
+      "database_id": "00000000-0000-0000-0000-000000000000",
+      "migrations_dir": "migrations"
+    }
+  ],
+
+  // One DownloadTracker instance (named DOWNLOAD_TRACKER_NAME) holds fetchr's rolling code, polls fetchr and serves the SSE stream.
+  "durable_objects": {
+    "bindings": [{ "name": "DOWNLOAD_TRACKER", "class_name": "DownloadTracker" }]
+  },
+  "migrations": [{ "tag": "v1", "new_sqlite_classes": ["DownloadTracker"] }],
+
+  // IP-keyed limits. period must be 10 or 60 seconds; counts are per Cloudflare location and approximate.
+  "ratelimits": [
+    { "name": "SEND_OTP_LIMITER", "namespace_id": "1001", "simple": { "limit": 3, "period": 60 } },
+    { "name": "LOGIN_LIMITER", "namespace_id": "1002", "simple": { "limit": 5, "period": 60 } },
+    { "name": "API_LIMITER", "namespace_id": "1003", "simple": { "limit": 60, "period": 10 } }
+  ]
+}

@@ -42,7 +42,6 @@ This README covers the whole project: how the backend and frontend are built, ho
 | fetchr (Python `yt-dlp` service on Render) | **Not built yet.** Its contract is defined in [backend/API.md](backend/API.md#upstream-fetchr). Until it exists, no video actually downloads |
 | Frontend: UI | Done. Login page, dashboard, downloads page, queue, download modal, collapsible sidebar, light and dark themes |
 | Frontend: API calls | **Not wired up.** No component calls the backend yet; the pages render `src/dummydata.ts` and the forms don't submit anywhere |
-| Legacy | The previous Bun downloader is kept in `backend/legacy/` for reference. It isn't mounted |
 
 ## Architecture
 
@@ -82,30 +81,29 @@ bhandar/
 │   ├── auth.ts                  send-otp and login bodies, password rule
 │   └── downloads.ts             download body, allowed hosts
 ├── backend/
-│   ├── wrangler.jsonc           Worker config: every var, secret names, D1, Durable Object, rate limits
-│   ├── .dev.vars.example        local secret values template
+│   ├── wrangler.jsonc.example   Worker config template: every var and secret (blank), D1, Durable Object, rate limits
+│   ├── wrangler.jsonc           your filled-in copy (gitignored, holds the secrets)
 │   ├── API.md                   full API reference
 │   ├── migrations/
 │   │   ├── 0001_init.sql        users and otp tables
 │   │   ├── 0002_seed_user.sql.example   login user seed (copy to .sql, gitignored)
 │   │   └── 0003_downloads.sql   finished downloads table
-│   ├── src/
-│   │   ├── index.ts             Hono app: logger, API rate limit, routers, /health, error mapping, exports DownloadTracker
-│   │   ├── api/v1/
-│   │   │   ├── auth.ts          /auth routes
-│   │   │   └── download.ts      /downloads routes (behind isUser)
-│   │   ├── modules/
-│   │   │   ├── auth/            controller, service, model, utils (+ .types.ts / .error.ts siblings)
-│   │   │   └── downloads/       controller, service, model, utils, tracker (DownloadTracker Durable Object)
-│   │   └── core/
-│   │       ├── types.ts         re-exports every *.types.ts in core/
-│   │       ├── middlewares/
-│   │       │   ├── fetchr.ts    Fetchr client: signs requests and keeps the rolling code
-│   │       │   ├── isUser.ts    guards routes with the auth cookie
-│   │       │   └── rateLimit.ts per-IP limits from the ratelimits bindings
-│   │       └── utils/
-│   │           └── storage.ts   Storage class for Backblaze B2 (upload, list, get, delete)
-│   └── legacy/                  previous downloader implementation and its tests, not mounted
+│   └── src/
+│       ├── index.ts             Hono app: logger, API rate limit, routers, /health, error mapping, exports DownloadTracker
+│       ├── api/v1/
+│       │   ├── auth.ts          /auth routes
+│       │   └── download.ts      /downloads routes (behind isUser)
+│       ├── modules/
+│       │   ├── auth/            controller, service, model, utils (+ .types.ts / .error.ts siblings)
+│       │   └── downloads/       controller, service, model, utils, tracker (DownloadTracker Durable Object)
+│       └── core/
+│           ├── types.ts         re-exports every *.types.ts in core/
+│           ├── middlewares/
+│           │   ├── fetchr.ts    Fetchr client: signs requests and keeps the rolling code
+│           │   ├── isUser.ts    guards routes with the auth cookie
+│           │   └── rateLimit.ts per-IP limits from the ratelimits bindings
+│           └── utils/
+│               └── storage.ts   Storage class for Backblaze B2 (upload, list, get, delete)
 └── frontend/
     ├── vite.config.ts           React plugin, /api proxy to :8787
     ├── tailwind.config.js       palette, dark mode, animations
@@ -138,7 +136,7 @@ bhandar/
 ```sh
 cd backend
 bun install
-cp .dev.vars.example .dev.vars                                         # local secret values
+cp wrangler.jsonc.example wrangler.jsonc                               # fill in the SMTP vars and the secrets
 cp migrations/0002_seed_user.sql.example migrations/0002_seed_user.sql  # fill in email and password hash
 bun run db:migrate:local    # creates the tables and the login user in the local D1 database
 bun run dev                 # http://127.0.0.1:8787
@@ -159,14 +157,13 @@ bun run dev                 # Vite dev server; /api is proxied to the backend on
 ```sh
 cd backend
 bunx wrangler d1 create bhandardb        # once; put the printed id in wrangler.jsonc database_id
-bunx wrangler secret put JWT_SECRET      # repeat for every name in secrets.required
 bun run db:migrate:remote
 bun run deploy
 ```
 
 ## Configuration
 
-All configuration is in `backend/wrangler.jsonc`. There is no `config.ts`, no `.env`, and no `process.env`. Code reads config from the Worker bindings, either `import { env } from 'cloudflare:workers'` or `c.env` (for example `new Storage(c.env)`). Vars hold real JSON types (numbers, booleans). `wrangler dev` regenerates `worker-configuration.d.ts` whenever `wrangler.jsonc` changes (`dev.generate_types`).
+All configuration, secrets included, is in `backend/wrangler.jsonc`. That file is gitignored; `backend/wrangler.jsonc.example` is the committed template with the personal values and secrets blank. There is no `config.ts`, no `.env`, no `.dev.vars` and no `process.env`. Code reads config from the Worker bindings, either `import { env } from 'cloudflare:workers'` or `c.env` (for example `new Storage(c.env)`). Vars hold real JSON types (numbers, booleans). `wrangler dev` regenerates `worker-configuration.d.ts` whenever `wrangler.jsonc` changes (`dev.generate_types`). It's gitignored too, because it's generated from the file that holds the secrets; run `bun run cf-typegen` on a fresh clone.
 
 | Where | Keys | Purpose |
 |---|---|---|
@@ -181,7 +178,7 @@ All configuration is in `backend/wrangler.jsonc`. There is no `config.ts`, no `.
 | `vars` | `DOWNLOAD_MAX_QUEUED` | Most downloads queued at once (`POST /downloads` returns `429` past it) and most jobs polled per alarm. Keep it under 50, the subrequests one Workers Free invocation may make |
 | `vars` | `DOWNLOAD_FILE_EXTENSION` | Added to a finished video's title when it's saved (`.mp4`) |
 | `vars` | `DOWNLOAD_ALLOWED_HOSTS` | Hosts a download link may use (Facebook and `fb.watch`) |
-| `secrets.required` | `JWT_SECRET`, `SMTP_PASS`, `B2_KEY_ID`, `B2_APP_KEY`, `DOWNLOADER_SEED_CODE` | Names only. Values go in `.dev.vars` locally and `bunx wrangler secret put <NAME>` when deployed; `wrangler deploy` fails if one is missing |
+| `vars` (secrets) | `JWT_SECRET`, `SMTP_PASS`, `B2_KEY_ID`, `B2_APP_KEY`, `DOWNLOADER_SEED_CODE` | The JWT signing key, the SMTP password, the B2 application key, and fetchr's first rolling code. They're plain vars, so when deployed they show in the Cloudflare dashboard like any other var |
 | `d1_databases` | `BHANDAR_DB` → `bhandardb` | The database |
 | `durable_objects` | `DOWNLOAD_TRACKER` → `DownloadTracker` | The download poller (SQLite-backed, so it runs on the free plan) |
 | `ratelimits` | `SEND_OTP_LIMITER` 3/min, `LOGIN_LIMITER` 5/min, `API_LIMITER` 60/10s | Per-IP limits. Cloudflare counts them per location, so they're approximate |
@@ -402,7 +399,6 @@ The backend controllers call them with values from `env`. The frontend doesn't u
 | backend | `bun run deploy` | Deploy the Worker |
 | backend | `bun run cf-typegen` | Regenerate binding types without `wrangler dev` running (e.g. in CI) |
 | backend | `bun run db:migrate:local` / `:remote` | Apply `migrations/` to D1, including the login user seed |
-| backend | `bun test` | Run tests (currently only the legacy downloader's tests) |
 | backend | `bun run typecheck` | Type-check with `tsc` |
 | frontend | `bun run dev` | Start the Vite dev server |
 | frontend | `bun run build` | Type-check and build to `dist/` |
@@ -411,7 +407,7 @@ The backend controllers call them with values from `env`. The frontend doesn't u
 
 ## Conventions
 
-- **Config** only in `wrangler.jsonc`, read through the Worker bindings. No hard-coded values, `.env` or `process.env`.
+- **Config** only in `wrangler.jsonc` (gitignored, template in `wrangler.jsonc.example`), read through the Worker bindings. No hard-coded values, `.env`, `.dev.vars` or `process.env`.
 - **Database** through D1's own API (`env.BHANDAR_DB.prepare().bind()`), no query builder. Schema and seed data are migrations; there's no `scripts/` folder.
 - **Sibling files.** Each file's types go in `<name>.types.ts` and its error class in `<name>.error.ts`. `core/types.ts` re-exports the core types.
 - **Comments** go at the top of each file, labelled by the symbol they describe, not inline.
