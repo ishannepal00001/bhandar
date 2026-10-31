@@ -21,7 +21,10 @@
     "JWT_TTL_DAYS": 7,
     "COOKIE_NAME": "bhandar_token",
     "COOKIE_SECURE": true,
-    "COOKIE_SAME_SITE": "Strict",
+    // The frontend is on another site, so the cookie must be SameSite None (which browsers only accept with Secure).
+    "COOKIE_SAME_SITE": "None",
+    // The one origin allowed by CORS and CSRF checks; set it to the deployed frontend's URL.
+    "FRONTEND_ORIGIN": "http://localhost:5173",
     "SMTP_HOST": "",
     "SMTP_PORT": 465,
     "SMTP_USER": "",
@@ -43,6 +46,8 @@
     "DOWNLOAD_MAX_QUEUED": 10,
     // Added to the name a finished video is saved under (fetchr merges downloads into mp4).
     "DOWNLOAD_FILE_EXTENSION": ".mp4",
+    // How many finished downloads GET /api/v1/dashboard returns.
+    "DASHBOARD_RECENT_LIMIT": 6,
     "DOWNLOAD_ALLOWED_HOSTS": ["facebook.com", "www.facebook.com", "m.facebook.com", "web.facebook.com", "fb.watch"],
     // Secrets. Copy this file to wrangler.jsonc (gitignored) and fill them in.
     "JWT_SECRET": "",

@@ -40,6 +40,7 @@ This README covers the whole project: how the backend and frontend are built, ho
 |---|---|
 | Backend: auth | Done. Password + emailed OTP login, JWT cookie, logout, per-IP rate limits |
 | Backend: downloads | Done on the Worker side. Queues jobs on fetchr, polls them from a Durable Object, stores finished ones in D1, pushes them over SSE, serves B2 links, deletes |
+| Backend: dashboard | Done. `GET /api/v1/dashboard` returns the stats, the queued jobs and the latest finished ones |
 | fetchr (Python `yt-dlp` service on Render) | **Not built yet.** Its contract is defined in [backend/API.md](backend/API.md#upstream-fetchr). Until it exists, no video actually downloads |
 | Frontend: UI | Done. Login page, dashboard, downloads page, queue, download modal, collapsible sidebar, light and dark themes |
 | Frontend: editing | UI only. The Editing page opens an uploaded file in a full-screen video.js player with a clip toolbar. Clips aren't cut or saved, and "Use downloads" does nothing yet |
@@ -49,8 +50,9 @@ This README covers the whole project: how the backend and frontend are built, ho
 
 ```
  Browser (React SPA)
-   │  same origin; /api is proxied to :8787 in dev
-   │  cookie: bhandar_token (httpOnly, SameSite=Strict)
+   │  cross-site in production (CORS + CSRF allow only FRONTEND_ORIGIN);
+   │  same origin in dev, where /api is proxied to :8787
+   │  cookie: bhandar_token (httpOnly, Secure, SameSite=None)
    ▼
  Cloudflare Worker (Hono)
    ├── /api/v1/auth/*       ──► D1 (users, otp) ──► SMTP (login codes)
@@ -60,6 +62,7 @@ This README covers the whole project: how the backend and frontend are built, ho
    │                              ├──► fetchr on Render (yt-dlp + ffmpeg) ──► uploads to B2
    │                              └──► D1 (downloads) when a job finishes
    ├── /api/v1/downloads/:id/file ──► presigned B2 link
+   ├── /api/v1/dashboard    ──► stats, queued jobs (Durable Object) and recent ones (D1)
    └── /health              ──► D1 round trip
 ```
 
@@ -234,7 +237,7 @@ Queued jobs aren't in D1. They live in the DownloadTracker's own SQLite storage 
 ### How login works
 
 1. **`POST /api/v1/auth/send-otp`** with `{ password }`. The controller checks it against the password rule: at least `PASSWORD_MIN_LENGTH` (8) characters, with an uppercase letter, a lowercase letter, a number and a symbol. The service hashes it with each user's salt and compares. On a match, it generates an `OTP_LENGTH` (6) digit code, stores its SHA-256 hash with an expiry of `OTP_TTL_MINUTES` (10), and emails the code through Nodemailer.
-2. **`POST /api/v1/auth/login`** with `{ code }`. The service looks up the hashed code, checks it hasn't expired, and signs an `HS256` JWT with `{ sub, name }` valid for `JWT_TTL_DAYS` (7). The code is deleted only after the token is signed, so a failed login doesn't use it up. The response sets the `bhandar_token` cookie (`HttpOnly`, `Secure`, `SameSite=Strict`) and also returns the token in the body for clients without cookies.
+2. **`POST /api/v1/auth/login`** with `{ code }`. The service looks up the hashed code, checks it hasn't expired, and signs an `HS256` JWT with `{ sub, name }` valid for `JWT_TTL_DAYS` (7). The code is deleted only after the token is signed, so a failed login doesn't use it up. The response sets the `bhandar_token` cookie (`HttpOnly`, `Secure`, `SameSite=None`, since the frontend is on another site) and also returns the token in the body for clients without cookies.
 3. **Protected routes** run `isUser`, which returns `401 Not logged in` with no cookie and `401 Invalid or expired session` for a bad or expired token.
 4. **`POST /api/v1/auth/logout`** clears the cookie. The JWT isn't revoked; it's only removed from the browser.
 
@@ -307,7 +310,7 @@ type Job = QueuedJob | FinishedJob
 
 ## Frontend
 
-A React 19 single-page app built with Vite. In development, Vite proxies `/api` to the Worker on `127.0.0.1:8787`, so the browser sees one origin and the `SameSite=Strict` cookie works without CORS.
+A React 19 single-page app built with Vite. In development, Vite proxies `/api` to the Worker on `127.0.0.1:8787`, so the browser sees one origin. In production the frontend is on another site, so it must send `credentials: 'include'` on `fetch` and `{ withCredentials: true }` on `EventSource`, and the Worker's `FRONTEND_ORIGIN` must be its URL.
 
 ### Routing
 

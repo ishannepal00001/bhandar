@@ -16,8 +16,9 @@ The HTTP API served by the Worker in `backend/src`. Every shape below comes from
 |---|---|
 | Base path | `/api/v1` (only `/health` is outside it) |
 | Format | JSON in and out (`Content-Type: application/json`), except the SSE stream |
-| Auth | The `bhandar_token` cookie set by `POST /auth/login`. Every `/downloads` route needs it; the `/auth` routes don't |
-| CORS | None. The frontend calls the API from the same origin (Vite proxies `/api` to `:8787` in dev), and the cookie is `SameSite=Strict` |
+| Auth | The `bhandar_token` cookie set by `POST /auth/login`. Every `/downloads` and `/dashboard` route needs it; the `/auth` routes don't |
+| CORS | The frontend is on another site. Only `FRONTEND_ORIGIN` is allowed, with credentials, so the frontend must send `credentials: 'include'` on `fetch` and `{ withCredentials: true }` on `EventSource`. The cookie is `SameSite=None; Secure` (`COOKIE_SAME_SITE`, `COOKIE_SECURE`) so the browser sends it cross-site. In dev, Vite proxies `/api` to `:8787`, so calls are same-origin anyway |
+| CSRF | `hono/csrf` rejects form-style requests (`application/x-www-form-urlencoded`, `multipart/form-data`, `text/plain` or no `Content-Type`) with an unsafe method from any origin other than `FRONTEND_ORIGIN`: `403 Forbidden`, as plain text |
 | Rate limits | Per client IP (`cf-connecting-ip`). Every `/api/*` request counts against `API_LIMITER` (60 per 10 s). `send-otp` also counts against `SEND_OTP_LIMITER` (3/min) and `login` against `LOGIN_LIMITER` (5/min). Cloudflare counts per location, so the limits are approximate |
 | Timestamps | ISO 8601 strings in UTC, e.g. `2026-10-24T14:00:00.000Z` |
 | Logging | Every `/api/*` request is logged with `hono/logger` |
@@ -147,7 +148,7 @@ Response `200` (`LoginResult` in `modules/auth/service.types.ts`):
 It also sets the cookie that the protected routes read:
 
 ```http
-Set-Cookie: bhandar_token=<jwt>; Max-Age=604800; Path=/; HttpOnly; Secure; SameSite=Strict
+Set-Cookie: bhandar_token=<jwt>; Max-Age=604800; Path=/; HttpOnly; Secure; SameSite=None
 ```
 
 The token is an `HS256` JWT with payload `{ sub: "<user id>", name: "<user name>", iat, exp }`, valid for `JWT_TTL_DAYS` (7). The browser only needs the cookie; the token in the body is there for clients that don't keep cookies.
@@ -279,7 +280,7 @@ Errors: `401`/`500` from `isUser`, and `500 Failed to list downloads` (D1).
 
 ### `GET /api/v1/downloads/events`
 
-A [Server-Sent Events](https://developer.mozilla.org/en-US/docs/Web/API/Server-sent_events) stream of the user's jobs as they finish. Use it with `new EventSource('/api/v1/downloads/events')`; the browser sends the cookie automatically.
+A [Server-Sent Events](https://developer.mozilla.org/en-US/docs/Web/API/Server-sent_events) stream of the user's jobs as they finish. Use it with `new EventSource(`${API}/api/v1/downloads/events`, { withCredentials: true })`; without `withCredentials` the browser doesn't send the cookie cross-site.
 
 Response `200`, `Content-Type: text/event-stream`:
 
@@ -300,6 +301,45 @@ data: {"id":"3f6c2a1e-…","source_url":"https://www.facebook.com/watch?v=102938
 - If fetchr can't be reached `DOWNLOAD_MAX_POLL_FAILURES` (15) polls in a row, the job finishes as `failed` with the last error in `error`.
 
 Errors: only the `isUser` ones, as plain JSON before the stream opens.
+
+## Dashboard
+
+Runs `isUser` first, like the downloads routes, with the same `401`/`500` errors.
+
+### `GET /api/v1/dashboard`
+
+Everything the dashboard page shows, in one call. It doesn't update itself: refetch it when `GET /downloads/events` sends an event (a job moved from `queued` to `recent`), after `POST /downloads` (a job joined `queued`), and when the `EventSource` reconnects.
+
+Response `200` (`Dashboard` in `modules/dashboard/service.types.ts`):
+
+```json
+{
+  "stats": { "downloads": 2, "storage": 71341468, "failed": 2, "queued": 1 },
+  "queued": [
+    { "id": "8a1d…", "source_url": "https://fb.watch/abc123/", "status": "queued", "created_at": "2026-10-24T14:05:00.000Z" }
+  ],
+  "recent": [
+    {
+      "id": "3f6c2a1e-8b4d-4c7a-9e2f-1d5b7c9a0e31",
+      "source_url": "https://www.facebook.com/watch?v=1029384756",
+      "status": "completed",
+      "title": "Some video",
+      "filename": "downloads/my-client/3f6c2a1e-8b4d-4c7a-9e2f-1d5b7c9a0e31/Some video.mp4",
+      "content_type": "video/mp4",
+      "filesize": 48213374,
+      "error": null,
+      "created_at": "2026-10-24T14:00:00.000Z",
+      "updated_at": "2026-10-24T14:01:12.000Z"
+    }
+  ]
+}
+```
+
+- `stats.downloads`: completed downloads. `stats.storage`: their total size in bytes. `stats.failed`: failed and cancelled downloads. `stats.queued`: the length of `queued`.
+- `queued`: `QueuedJob[]`, newest first.
+- `recent`: the latest `DASHBOARD_RECENT_LIMIT` (6) `FinishedJob`s of any status, newest first.
+
+Errors: `401`/`500` from `isUser`, and `500 Failed to count downloads` or `500 Failed to list recent downloads` (D1).
 
 ### `GET /api/v1/downloads/:id/file`
 
@@ -353,6 +393,7 @@ Errors:
 | 202 | Download queued |
 | 400 | Body isn't JSON (`Body must be valid JSON`) or fails validation (`Invalid request` + `issues`) |
 | 401 | Wrong password or code, or not logged in or session expired |
+| 403 | CSRF check failed: a form-style request from an origin other than `FRONTEND_ORIGIN` (plain-text `Forbidden`) |
 | 404 | Route, download or B2 file not found |
 | 409 | The download has no file (failed or cancelled) |
 | 429 | Rate limited (`Too many requests, try again in a minute`), or the download queue is full |
