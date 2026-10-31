@@ -2,7 +2,15 @@ import { ArrowRight, Eye, EyeOff, KeyRound } from 'lucide-react'
 import { useState } from 'react'
 import { muted } from '../../styles'
 
-function PasswordForm({ onSubmit }: { onSubmit: (password: string) => void }) {
+function PasswordForm({
+  onSubmit,
+  pending = false,
+  error = null,
+}: {
+  onSubmit: (password: string) => void
+  pending?: boolean
+  error?: string | null
+}) {
   const [password, setPassword] = useState('')
   const [visible, setVisible] = useState(false)
 
@@ -40,11 +48,17 @@ function PasswordForm({ onSubmit }: { onSubmit: (password: string) => void }) {
           {visible ? <EyeOff size={16} /> : <Eye size={16} />}
         </button>
       </div>
+      {error && (
+        <p role="alert" className="text-sm text-accent dark:text-night-accent">
+          {error}
+        </p>
+      )}
       <button
         type="submit"
-        className="flex w-full items-center justify-center gap-2 bg-primary px-6 py-2.5 text-sm text-background hover:bg-primary/90 dark:bg-night-primary dark:text-night-background dark:hover:bg-night-primary/90"
+        disabled={pending}
+        className="flex w-full items-center justify-center gap-2 bg-primary px-6 py-2.5 text-sm text-background hover:bg-primary/90 disabled:opacity-40 dark:bg-night-primary dark:text-night-background dark:hover:bg-night-primary/90"
       >
-        Continue
+        {pending ? 'Sending code…' : 'Continue'}
         <ArrowRight size={16} />
       </button>
     </form>

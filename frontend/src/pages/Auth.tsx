@@ -1,15 +1,30 @@
+// errorMessage(): A 400 names the bad field in issues; show that message over the generic "Invalid request".
+// Auth: The code step opens only once send-otp succeeds, and a login goes to the dashboard. A wrong password or code
+//   (401) stays on the form; the global 401 redirect skips /auth.
+import { useNavigate } from '@tanstack/react-router'
 import { useState } from 'react'
 import CodeForm from '../components/Auth/CodeForm'
 import PasswordForm from '../components/Auth/PasswordForm'
 import Stepper from '../components/Auth/Stepper'
 import { config } from '../config'
+import { authFacade } from '../facades/auth'
+import { ApiError } from '../hooks/request.error'
 import { muted } from '../styles'
 
 const steps = ['Password', 'Code'] as const
 
+function errorMessage(error: Error | null): string | null {
+  if (!error) return null
+  const issue = error instanceof ApiError ? Object.values(error.issues ?? {})[0]?.[0] : undefined
+  return issue ?? error.message
+}
+
 function Auth() {
   const [step, setStep] = useState(0)
   const [direction, setDirection] = useState<'next' | 'prev'>('next')
+  const navigate = useNavigate()
+  const sendOtp = authFacade.useSendOtp()
+  const login = authFacade.useLogin()
 
   const goTo = (next: number) => {
     setDirection(next > step ? 'next' : 'prev')
@@ -36,12 +51,23 @@ function Auth() {
           }`}
         >
           {step === 0 ? (
-            <PasswordForm onSubmit={() => goTo(1)} />
+            <PasswordForm
+              pending={sendOtp.isPending}
+              error={errorMessage(sendOtp.error)}
+              onSubmit={(password) => sendOtp.mutate({ password }, { onSuccess: () => goTo(1) })}
+            />
           ) : (
             <CodeForm
               length={config.auth.codeLength}
-              onSubmit={() => {}}
-              onBack={() => goTo(0)}
+              pending={login.isPending}
+              error={errorMessage(login.error)}
+              onSubmit={(code) =>
+                login.mutate({ code }, { onSuccess: () => void navigate({ to: '/', replace: true }) })
+              }
+              onBack={() => {
+                login.reset()
+                goTo(0)
+              }}
             />
           )}
         </section>

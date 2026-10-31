@@ -6,10 +6,14 @@ function CodeForm({
   length,
   onSubmit,
   onBack,
+  pending = false,
+  error = null,
 }: {
   length: number
   onSubmit: (code: string) => void
   onBack: () => void
+  pending?: boolean
+  error?: string | null
 }) {
   const [digits, setDigits] = useState<string[]>(() => Array(length).fill(''))
   const inputs = useRef<(HTMLInputElement | null)[]>([])
@@ -36,7 +40,7 @@ function CodeForm({
       className="space-y-4"
       onSubmit={(e) => {
         e.preventDefault()
-        if (complete) onSubmit(digits.join(''))
+        if (complete && !pending) onSubmit(digits.join(''))
       }}
     >
       <p className={`text-xs uppercase tracking-widest ${muted}`}>Login code</p>
@@ -72,6 +76,11 @@ function CodeForm({
         ))}
       </div>
       <p className={`text-sm ${muted}`}>Enter the {length}-digit code sent to your email.</p>
+      {error && (
+        <p role="alert" className="text-sm text-accent dark:text-night-accent">
+          {error}
+        </p>
+      )}
       <div className="flex gap-3">
         <button
           type="button"
@@ -82,11 +91,11 @@ function CodeForm({
         </button>
         <button
           type="submit"
-          disabled={!complete}
+          disabled={!complete || pending}
           className="flex flex-1 items-center justify-center gap-2 bg-primary px-6 py-2.5 text-sm text-background hover:bg-primary/90 disabled:opacity-40 dark:bg-night-primary dark:text-night-background dark:hover:bg-night-primary/90"
         >
           <LogIn size={16} />
-          Log in
+          {pending ? 'Logging in…' : 'Log in'}
         </button>
       </div>
     </form>
