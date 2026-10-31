@@ -5,11 +5,9 @@ import { muted } from '../../styles'
 function PasswordForm({
   onSubmit,
   pending = false,
-  error = null,
 }: {
   onSubmit: (password: string) => void
   pending?: boolean
-  error?: string | null
 }) {
   const [password, setPassword] = useState('')
   const [visible, setVisible] = useState(false)
@@ -48,11 +46,6 @@ function PasswordForm({
           {visible ? <EyeOff size={16} /> : <Eye size={16} />}
         </button>
       </div>
-      {error && (
-        <p role="alert" className="text-sm text-accent dark:text-night-accent">
-          {error}
-        </p>
-      )}
       <button
         type="submit"
         disabled={pending}

@@ -1,4 +1,8 @@
+// VideoCard: Save fetches a short-lived link and sends the browser to it; B2 serves it as an attachment, so it downloads
+//   without leaving the page (a new tab would be blocked as a popup, since it opens after an await). Delete removes the
+//   file and the job, and the lists refetch. The hooks toast the outcome.
 import { Ban, CircleAlert, CircleCheck, Download, Film, Trash2 } from 'lucide-react'
+import { downloadsFacade } from '../facades/downloads'
 import { muted, panel } from '../styles'
 import type { FinishedJob } from '../types/downloads'
 import { formatBytes, formatDate } from '../utils/format'
@@ -20,7 +24,7 @@ const badges = {
 }
 
 const actionButton =
-  'bg-background p-1.5 text-primary/60 hover:text-primary dark:bg-night-background dark:text-night-primary/60 dark:hover:text-night-primary'
+  'bg-background p-1.5 disabled:opacity-40 text-primary/60 hover:text-primary dark:bg-night-background dark:text-night-primary/60 dark:hover:text-night-primary'
 
 function VideoCard({
   job,
@@ -35,6 +39,9 @@ function VideoCard({
   const badge = badges[job.status]
   const BadgeIcon = badge.icon
   const completed = job.status === 'completed'
+  const downloadFile = downloadsFacade.useDownloadFile()
+  const deleteDownload = downloadsFacade.useDeleteDownload()
+  const busy = downloadFile.isPending || deleteDownload.isPending
 
   return (
     <div className={`${panel} ${className}`}>
@@ -43,11 +50,27 @@ function VideoCard({
         {actions && (
           <div className="absolute right-2 top-2 flex gap-1">
             {completed && (
-              <button type="button" aria-label="Save video" title="Save video" className={actionButton}>
+              <button
+                type="button"
+                aria-label="Save video"
+                title="Save video"
+                disabled={busy}
+                onClick={() =>
+                  downloadFile.mutate(job.id, { onSuccess: ({ url }) => window.location.assign(url) })
+                }
+                className={actionButton}
+              >
                 <Download size={16} />
               </button>
             )}
-            <button type="button" aria-label="Delete" title="Delete" className={actionButton}>
+            <button
+              type="button"
+              aria-label="Delete"
+              title="Delete"
+              disabled={busy}
+              onClick={() => deleteDownload.mutate(job.id)}
+              className={actionButton}
+            >
               <Trash2 size={16} />
             </button>
           </div>

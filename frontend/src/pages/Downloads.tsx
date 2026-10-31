@@ -1,9 +1,8 @@
-import { useState } from 'react'
 import DownloadForm from '../components/Downloads/DownloadForm'
 import DownloadQueue from '../components/Downloads/DownloadQueue'
 import HeaderActions from '../components/HeaderActions'
 import VideoCard from '../components/VideoCard'
-import { jobs } from '../dummydata'
+import { downloadsFacade } from '../facades/downloads'
 import { muted } from '../styles'
 import type { FinalStatus } from '../types/downloads'
 import { isFinished, isQueued, statusLabels } from '../utils/jobs'
@@ -16,7 +15,8 @@ const filters: { label: string; status: FinalStatus | null }[] = [
 ]
 
 function Downloads() {
-  const [filter, setFilter] = useState<FinalStatus | null>(null)
+  const { data: jobs = [] } = downloadsFacade.useDownloads()
+  const filter = downloadsFacade.useDownloadStore((state) => state.filter)
   const queued = jobs.filter(isQueued)
   const finished = jobs.filter(isFinished)
   const videos = filter === null ? finished : finished.filter((job) => job.status === filter)
@@ -46,7 +46,7 @@ function Downloads() {
                 <button
                   key={label}
                   type="button"
-                  onClick={() => setFilter(status)}
+                  onClick={() => downloadsFacade.setFilter(status)}
                   aria-pressed={filter === status}
                   className={`flex-1 px-4 py-1.5 text-sm sm:flex-none ${
                     filter === status

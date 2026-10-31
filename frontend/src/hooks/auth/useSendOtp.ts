@@ -1,10 +1,13 @@
 // hooks: POST /auth/send-otp; checks the password and emails the login code
 import { useMutation } from '@tanstack/react-query'
 import type { SendOtpRequest, SendOtpResult } from '../../types/auth'
+import { notifyError, notifySuccess } from '../notify'
 import { request } from '../request'
 
 export function useSendOtp() {
   return useMutation({
     mutationFn: (input: SendOtpRequest) => request<SendOtpResult>('/auth/send-otp', { method: 'POST', body: input }),
+    onSuccess: () => notifySuccess('Login code sent to your email'),
+    onError: notifyError,
   })
 }

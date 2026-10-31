@@ -10,33 +10,28 @@ import {
 import DownloadQueue from '../components/Downloads/DownloadQueue'
 import HeaderActions from '../components/HeaderActions'
 import Marquee from '../components/Marquee'
-import { jobs } from '../dummydata'
+import { dashboardFacade } from '../facades/dashboard'
 import { muted, panel } from '../styles'
+import type { Dashboard } from '../types/dashboard'
 import { formatBytes } from '../utils/format'
-import { isFinished, isQueued } from '../utils/jobs'
 
 type Stat = { label: string; value: string; note: string; icon: LucideIcon }
 
-function Dashboard() {
-  const queued = jobs.filter(isQueued)
-  const finished = jobs.filter(isFinished)
-  const completed = finished.filter((job) => job.status === 'completed')
+const emptyDashboard: Dashboard = {
+  stats: { downloads: 0, storage: 0, queued: 0, failed: 0 },
+  queued: [],
+  recent: [],
+}
+
+function DashboardPage() {
+  const { data = emptyDashboard } = dashboardFacade.useDashboard()
+  const { stats: totals, queued, recent } = data
 
   const stats: Stat[] = [
-    { label: 'Downloads', value: String(completed.length), note: 'saved videos', icon: Download },
-    {
-      label: 'Storage Used',
-      value: formatBytes(completed.reduce((total, job) => total + (job.filesize ?? 0), 0)),
-      note: 'across saved videos',
-      icon: HardDrive,
-    },
-    { label: 'In Queue', value: String(queued.length), note: 'being downloaded', icon: LoaderCircle },
-    {
-      label: 'Failed',
-      value: String(finished.length - completed.length),
-      note: 'failed or cancelled',
-      icon: TriangleAlert,
-    },
+    { label: 'Downloads', value: String(totals.downloads), note: 'saved videos', icon: Download },
+    { label: 'Storage Used', value: formatBytes(totals.storage), note: 'across saved videos', icon: HardDrive },
+    { label: 'In Queue', value: String(totals.queued), note: 'being downloaded', icon: LoaderCircle },
+    { label: 'Failed', value: String(totals.failed), note: 'failed or cancelled', icon: TriangleAlert },
   ]
 
   return (
@@ -95,10 +90,10 @@ function Dashboard() {
               <ArrowRight size={14} />
             </Link>
           </div>
-          {finished.length === 0 ? (
+          {recent.length === 0 ? (
             <p className={`text-sm ${muted}`}>Finished downloads will show up here.</p>
           ) : (
-            <Marquee items={finished.slice(0, 6)} />
+            <Marquee items={recent} />
           )}
         </section>
       </main>
@@ -106,4 +101,4 @@ function Dashboard() {
   )
 }
 
-export default Dashboard
+export default DashboardPage

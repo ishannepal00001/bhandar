@@ -3,6 +3,7 @@
 import { useMutation, useQueryClient } from '@tanstack/react-query'
 import { persister } from '../../queryClient'
 import type { LogoutResult } from '../../types/auth'
+import { notifyError, notifySuccess } from '../notify'
 import { request } from '../request'
 
 export function useLogout() {
@@ -12,6 +13,8 @@ export function useLogout() {
     onSuccess: async () => {
       queryClient.clear()
       await persister.removeClient()
+      notifySuccess('Logged out')
     },
+    onError: notifyError,
   })
 }

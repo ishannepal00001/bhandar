@@ -7,13 +7,11 @@ function CodeForm({
   onSubmit,
   onBack,
   pending = false,
-  error = null,
 }: {
   length: number
   onSubmit: (code: string) => void
   onBack: () => void
   pending?: boolean
-  error?: string | null
 }) {
   const [digits, setDigits] = useState<string[]>(() => Array(length).fill(''))
   const inputs = useRef<(HTMLInputElement | null)[]>([])
@@ -76,11 +74,6 @@ function CodeForm({
         ))}
       </div>
       <p className={`text-sm ${muted}`}>Enter the {length}-digit code sent to your email.</p>
-      {error && (
-        <p role="alert" className="text-sm text-accent dark:text-night-accent">
-          {error}
-        </p>
-      )}
       <div className="flex gap-3">
         <button
           type="button"

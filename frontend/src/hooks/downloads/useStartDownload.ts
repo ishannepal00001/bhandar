@@ -4,12 +4,17 @@
 import { useMutation, useQueryClient } from '@tanstack/react-query'
 import type { DownloadRequest, QueuedJob } from '../../types/downloads'
 import { refreshJobs } from '../queryKeys'
+import { notifyError, notifySuccess } from '../notify'
 import { request } from '../request'
 
 export function useStartDownload() {
   const queryClient = useQueryClient()
   return useMutation({
     mutationFn: (input: DownloadRequest) => request<QueuedJob>('/downloads', { method: 'POST', body: input }),
-    onSuccess: () => refreshJobs(queryClient),
+    onSuccess: () => {
+      notifySuccess('Download queued')
+      return refreshJobs(queryClient)
+    },
+    onError: notifyError,
   })
 }

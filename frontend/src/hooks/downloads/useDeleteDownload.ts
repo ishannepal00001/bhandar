@@ -2,12 +2,17 @@
 import { useMutation, useQueryClient } from '@tanstack/react-query'
 import type { DeleteResult } from '../../types/downloads'
 import { refreshJobs } from '../queryKeys'
+import { notifyError, notifySuccess } from '../notify'
 import { request } from '../request'
 
 export function useDeleteDownload() {
   const queryClient = useQueryClient()
   return useMutation({
     mutationFn: (id: string) => request<DeleteResult>(`/downloads/${encodeURIComponent(id)}`, { method: 'DELETE' }),
-    onSuccess: () => refreshJobs(queryClient),
+    onSuccess: () => {
+      notifySuccess('Download deleted')
+      return refreshJobs(queryClient)
+    },
+    onError: notifyError,
   })
 }
