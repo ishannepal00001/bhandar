@@ -44,7 +44,7 @@ This README covers the whole project: how the backend and frontend are built, ho
 | fetchr (Python `yt-dlp` service on Render) | **Not built yet.** Its contract is defined in [backend/API.md](backend/API.md#upstream-fetchr). Until it exists, no video actually downloads |
 | Frontend: UI | Done. Login page, dashboard, downloads page, queue, download modal, collapsible sidebar, light and dark themes |
 | Frontend: editing | UI only. The Editing page opens an uploaded file in a full-screen video.js player with a clip toolbar. Clips aren't cut or saved, and "Use downloads" does nothing yet |
-| Frontend: API calls | **Not wired up.** No component calls the backend yet; the pages render `src/dummydata.ts` and the forms don't submit anywhere |
+| Frontend: API calls | Hooks, persisted query cache and the dashboard and downloads facades are built. **Not wired up:** the pages still render `src/dummydata.ts` and the forms don't submit anywhere |
 
 ## Architecture
 
@@ -119,13 +119,14 @@ bhandar/
         ├── pages/               Auth, Dashboard, Downloads, Editing
         ├── editor/              clip editor: video.js player + clip toolbar, exported from index.ts
         ├── components/          Sidebar, Modal, Marquee, VideoCard, HeaderActions, Auth/*, Downloads/*
-        ├── stores/              Zustand stores (sidebar, download modal)
-        ├── hooks/               useMediaQuery
-        ├── types/downloads.ts   Job types matching the backend
+        ├── stores/              Zustand stores: UI (sidebar, download modal) and client-side download and dashboard state
+        ├── facades/             junctions (dashboardFacade, downloadsFacade) exposing the hooks and store functions
+        ├── hooks/               TanStack Query hooks, one per endpoint, on request.ts; plus useMediaQuery
+        ├── queryClient.ts       the QueryClient and its localStorage persister
+        ├── types/               request and response types matching the backend
         ├── utils/               formatting and job helpers
         ├── config.ts, styles.ts shared constants and class strings
-        ├── dummydata.ts         sample jobs the pages render for now
-        └── facades/             empty; reserved for the API layer
+        └── dummydata.ts         sample jobs the pages render for now
 ```
 
 ## Getting started
@@ -400,7 +401,7 @@ Form state is local `useState`. `hooks/useMediaQuery` wraps `matchMedia` in `use
 
 `types/downloads.ts` mirrors the backend's `QueuedJob`, `FinishedJob` and `Job`. `utils/jobs.ts` has the `isQueued` / `isFinished` type guards, the status labels (Done, Failed, Cancelled) and `jobTitle`. `utils/format.ts` formats byte sizes and dates with `Intl.DateTimeFormat`.
 
-The pages currently read `jobs` from `src/dummydata.ts`, a list of sample jobs in the backend's exact shape. The forms, the cancel, save and delete buttons, and the Create clip button don't do anything yet. `src/facades/` is empty and is where the API calls will go: `send-otp` and `login` from the auth forms, `GET /downloads` and the `/events` stream for the pages, and `POST`, `/:id/file` and `DELETE` for the actions.
+The pages currently read `jobs` from `src/dummydata.ts`, a list of sample jobs in the backend's exact shape. The forms, the cancel, save and delete buttons, and the Create clip button don't do anything yet. The data layer is built but not wired in yet. `src/hooks/` has a TanStack Query hook per endpoint, all calling `request.ts` (which always sends the cookie), and `useDownloadEvents` refetches the job queries when the SSE stream reports a finished job. The query cache is saved to localStorage (`queryClient.ts`) and cleared on logout. `src/facades/` is the junction the pages call through: `dashboardFacade` and `downloadsFacade` expose the hooks (and any store functions) unchanged, e.g. `downloadsFacade.useDownloads()`. UI-only state such as the sidebar and the download modal stays in its store, outside the facades.
 
 ### Styling and theme
 
