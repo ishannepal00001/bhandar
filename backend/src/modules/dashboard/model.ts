@@ -31,7 +31,7 @@ export function totals(userId: number): Promise<Totals> {
 export function recentDownloads(userId: number, limit: number): Promise<FinishedJob[]> {
   return query('Failed to list recent downloads', async () => {
     const { results } = await env.BHANDAR_DB.prepare(
-      'SELECT id, source_url, status, title, filename, content_type, filesize, error, created_at, updated_at ' +
+      'SELECT id, source_url, status, title, filename, content_type, filesize, thumbnail, error, created_at, updated_at ' +
         'FROM downloads WHERE user_id = ? ORDER BY created_at DESC LIMIT ?',
     )
       .bind(userId, limit)

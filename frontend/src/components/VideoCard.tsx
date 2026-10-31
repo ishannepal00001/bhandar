@@ -1,10 +1,11 @@
 // VideoCard: Save fetches a short-lived link and sends the browser to it; B2 serves it as an attachment, so it downloads
 //   without leaving the page (a new tab would be blocked as a popup, since it opens after an await). Delete removes the
 //   file and the job, and the lists refetch. The hooks toast the outcome.
-import { Ban, CircleAlert, CircleCheck, Download, Film, Trash2 } from 'lucide-react'
+import { Ban, CircleAlert, CircleCheck, Download, Trash2 } from 'lucide-react'
 import { downloadsFacade } from '../facades/downloads'
 import { muted, panel } from '../styles'
 import type { FinishedJob } from '../types/downloads'
+import Thumbnail from './Thumbnail'
 import { formatBytes, formatDate } from '../utils/format'
 import { jobTitle, statusLabels } from '../utils/jobs'
 
@@ -45,8 +46,8 @@ function VideoCard({
 
   return (
     <div className={`${panel} ${className}`}>
-      <div className="relative flex aspect-video items-center justify-center bg-primary/10 dark:bg-night-primary/10">
-        <Film size={32} strokeWidth={1.5} className={muted} />
+      <div className="relative">
+        <Thumbnail src={job.thumbnail_url} className="aspect-video" />
         {actions && (
           <div className="absolute right-2 top-2 flex gap-1">
             {completed && (

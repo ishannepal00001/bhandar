@@ -1,12 +1,12 @@
 // DownloadPicker: Lists the completed downloads (failed and cancelled ones have no file). Picking one fetches its
 //   short-lived B2 link and hands it to onPick; the row shows "Opening…" meanwhile.
 import { Link } from '@tanstack/react-router'
-import { Film } from 'lucide-react'
 import { downloadsFacade } from '../../facades/downloads'
 import { muted } from '../../styles'
 import type { FinishedJob, Job } from '../../types/downloads'
 import { formatBytes, formatDate } from '../../utils/format'
 import { jobTitle } from '../../utils/jobs'
+import Thumbnail from '../Thumbnail'
 
 const isCompleted = (job: Job): job is FinishedJob => job.status === 'completed'
 
@@ -40,7 +40,7 @@ function DownloadPicker({ onPick }: { onPick: (src: string) => void }) {
             onClick={() => downloadFile.mutate(job.id, { onSuccess: ({ url }) => onPick(url) })}
             className="flex w-full items-center gap-3 px-4 py-3 text-left hover:bg-primary/5 disabled:opacity-40 dark:hover:bg-night-primary/5"
           >
-            <Film size={18} className={`shrink-0 ${muted}`} />
+            <Thumbnail src={job.thumbnail_url} iconSize={18} className="aspect-video w-20 shrink-0" />
             <span className="min-w-0 flex-1">
               <span className="block truncate text-sm" title={jobTitle(job)}>
                 {jobTitle(job)}

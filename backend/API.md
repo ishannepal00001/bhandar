@@ -54,13 +54,20 @@ type FinishedJob = {
   filename: string | null      // B2 object key downloads/<client_id>/<id>/<file>; set only when completed
   content_type: string | null  // e.g. "video/mp4"
   filesize: number | null      // bytes
+  thumbnail: string | null     // B2 key downloads/<client_id>/<id>/thumbnail.jpg; null if fetchr couldn't make one
   error: string | null         // reason, when failed
   created_at: string
   updated_at: string           // when it reached its final status
 }
 
 type Job = QueuedJob | FinishedJob   // tell them apart by status
+
+type ShownJob = FinishedJob & {
+  thumbnail_url: string | null // signed inline link to the thumbnail, valid STORAGE_URL_TTL_SECONDS (3600)
+}
 ```
+
+`GET /downloads` and `GET /dashboard` return finished jobs as `ShownJob`. Signing is local (no request to B2), so it doesn't check that the image exists; show a placeholder when it fails to load. SSE events carry a plain `FinishedJob`.
 
 Queued jobs live in the `DownloadTracker` Durable Object. Finished jobs live in the D1 `downloads` table (`migrations/0003_downloads.sql`). A job moves from the first to the second once, when it finishes.
 
@@ -239,7 +246,7 @@ Errors:
 
 Lists the user's downloads.
 
-Response `200`: `Job[]`. Queued jobs come first, newest first, followed by finished jobs, newest first.
+Response `200`: `(QueuedJob | ShownJob)[]`. Queued jobs come first, newest first, followed by finished jobs, newest first.
 
 ```json
 [
@@ -257,6 +264,8 @@ Response `200`: `Job[]`. Queued jobs come first, newest first, followed by finis
     "filename": "downloads/my-client/3f6c2a1e-8b4d-4c7a-9e2f-1d5b7c9a0e31/Some video.mp4",
     "content_type": "video/mp4",
     "filesize": 48213374,
+    "thumbnail": "downloads/my-client/3f6c2a1e-8b4d-4c7a-9e2f-1d5b7c9a0e31/thumbnail.jpg",
+    "thumbnail_url": "https://s3.us-east-005.backblazeb2.com/bhandar.bucket/downloads/…/thumbnail.jpg?X-Amz-…",
     "error": null,
     "created_at": "2026-10-24T14:00:00.000Z",
     "updated_at": "2026-10-24T14:01:12.000Z"
@@ -269,6 +278,8 @@ Response `200`: `Job[]`. Queued jobs come first, newest first, followed by finis
     "filename": null,
     "content_type": null,
     "filesize": null,
+    "thumbnail": null,
+    "thumbnail_url": null,
     "error": "Download service is unreachable",
     "created_at": "2026-10-23T09:00:00.000Z",
     "updated_at": "2026-10-23T09:02:00.000Z"
@@ -327,6 +338,8 @@ Response `200` (`Dashboard` in `modules/dashboard/service.types.ts`):
       "filename": "downloads/my-client/3f6c2a1e-8b4d-4c7a-9e2f-1d5b7c9a0e31/Some video.mp4",
       "content_type": "video/mp4",
       "filesize": 48213374,
+      "thumbnail": "downloads/my-client/3f6c2a1e-8b4d-4c7a-9e2f-1d5b7c9a0e31/thumbnail.jpg",
+      "thumbnail_url": "https://s3.us-east-005.backblazeb2.com/bhandar.bucket/downloads/…/thumbnail.jpg?X-Amz-…",
       "error": null,
       "created_at": "2026-10-24T14:00:00.000Z",
       "updated_at": "2026-10-24T14:01:12.000Z"
@@ -337,7 +350,7 @@ Response `200` (`Dashboard` in `modules/dashboard/service.types.ts`):
 
 - `stats.downloads`: completed downloads. `stats.storage`: their total size in bytes. `stats.failed`: failed and cancelled downloads. `stats.queued`: the length of `queued`.
 - `queued`: `QueuedJob[]`, newest first.
-- `recent`: the latest `DASHBOARD_RECENT_LIMIT` (6) `FinishedJob`s of any status, newest first.
+- `recent`: the latest `DASHBOARD_RECENT_LIMIT` (6) finished jobs (`ShownJob`) of any status, newest first.
 
 Errors: `401`/`500` from `isUser`, and `500 Failed to count downloads` or `500 Failed to list recent downloads` (D1).
 
@@ -366,7 +379,7 @@ Errors:
 
 ### `DELETE /api/v1/downloads/:id`
 
-Deletes a finished download. It removes the B2 object first, if there is one, and then the D1 row, so a delete that fails partway can just be retried.
+Deletes a finished download. It removes the B2 video and thumbnail first, if there are any, and then the D1 row, so a delete that fails partway can just be retried.
 
 Path params: `id`, the job id.
 
@@ -431,6 +444,7 @@ A fetchr download (`fetchrDownloadSchema` in `modules/downloads/utils.ts`):
   filename: string | null      // bare file name; the Worker turns it into downloads/<client_id>/<id>/<filename>
   content_type: string | null
   filesize: number | null
+  thumbnail: string | null     // bare file name ("thumbnail.jpg"), set only when completed; optional, treated as null when missing
   error: string | null
   created_at: string
   updated_at: string

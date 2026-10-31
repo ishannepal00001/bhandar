@@ -5,7 +5,7 @@ import { createDownloadRequestSchema } from '../../../../schemas/downloads'
 import * as downloadsService from './service'
 import { DownloadsServiceError } from './service.error'
 import type { DeleteResult, DownloadsServiceErrorKind, FileLinkResult } from './service.types'
-import type { Job, QueuedJob } from './utils.types'
+import type { QueuedJob, ShownJob } from './utils.types'
 import { DownloadsControllerError } from './controller.error'
 
 const statusByKind: Record<DownloadsServiceErrorKind, DownloadsControllerError['status']> = {
@@ -41,7 +41,7 @@ export async function start(userId: number, body: unknown): Promise<QueuedJob> {
   return fromService(() => downloadsService.start(userId, input))
 }
 
-export function list(userId: number): Promise<Job[]> {
+export function list(userId: number): Promise<(QueuedJob | ShownJob)[]> {
   return fromService(() => downloadsService.list(userId))
 }
 

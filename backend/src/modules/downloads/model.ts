@@ -15,8 +15,8 @@ async function query<T>(message: string, run: () => Promise<T>): Promise<T> {
 export function insertDownload(download: Download): Promise<void> {
   return query('Failed to save download', async () => {
     await env.BHANDAR_DB.prepare(
-      'INSERT INTO downloads (id, user_id, source_url, status, title, filename, content_type, filesize, error, created_at, updated_at) ' +
-        'VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) ON CONFLICT(id) DO NOTHING',
+      'INSERT INTO downloads (id, user_id, source_url, status, title, filename, content_type, filesize, thumbnail, error, ' +
+        'created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) ON CONFLICT(id) DO NOTHING',
     )
       .bind(
         download.id,
@@ -27,6 +27,7 @@ export function insertDownload(download: Download): Promise<void> {
         download.filename,
         download.content_type,
         download.filesize,
+        download.thumbnail,
         download.error,
         download.created_at,
         download.updated_at,

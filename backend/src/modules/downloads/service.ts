@@ -1,6 +1,7 @@
 // downloads: business logic
 // start(): Hands the link to the tracker, which queues it on fetchr; the result arrives later over SSE.
-// remove(): Removes the B2 file (if any) before the row, so a failed delete can be retried.
+// list(): Finished jobs carry a signed thumbnail link.
+// remove(): Removes the B2 video and thumbnail (if any) before the row, so a failed delete can be retried.
 // saveAs(): The name the browser saves the file under: the title, or the key's file name without its extension, ending
 //   in DOWNLOAD_FILE_EXTENSION.
 import { env } from 'cloudflare:workers'
@@ -11,7 +12,8 @@ import * as downloadsModel from './model'
 import { DownloadsModelError } from './model.error'
 import type { Download } from './model.types'
 import type { DeleteResult, FileLinkResult } from './service.types'
-import type { FinishedJob, Job, QueuedJob } from './utils.types'
+import { withThumbnailUrls } from './utils'
+import type { FinishedJob, QueuedJob, ShownJob } from './utils.types'
 import { DownloadsServiceError } from './service.error'
 
 function tracker() {
@@ -46,9 +48,9 @@ export async function start(userId: number, input: DownloadRequest): Promise<Que
   return result.job
 }
 
-export async function list(userId: number): Promise<Job[]> {
+export async function list(userId: number): Promise<(QueuedJob | ShownJob)[]> {
   const [queued, finished] = await Promise.all([tracker().listQueued(userId), fromModel(() => downloadsModel.listDownloads(userId))])
-  return [...queued, ...finished.map(toFinishedJob)]
+  return [...queued, ...(await withThumbnailUrls(finished.map(toFinishedJob)))]
 }
 
 export function events(userId: number, request: Request): Promise<Response> {
@@ -80,8 +82,9 @@ export async function fileLink(userId: number, id: string): Promise<FileLinkResu
 export async function remove(userId: number, id: string): Promise<DeleteResult> {
   const download = await fromModel(() => downloadsModel.findDownload(userId, id))
   if (!download) throw new DownloadsServiceError('Download not found', 'NOT_FOUND')
-  const { filename } = download
+  const { filename, thumbnail } = download
   if (filename) await fromStorage(() => new Storage(env).deleteFile(filename))
+  if (thumbnail) await fromStorage(() => new Storage(env).deleteFile(thumbnail))
   await fromModel(() => downloadsModel.deleteDownload(userId, id))
   return { deleted: true }
 }

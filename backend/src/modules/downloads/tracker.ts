@@ -194,6 +194,7 @@ function giveUp(job: TrackedJob, error: string): FinishedJob {
     filename: null,
     content_type: null,
     filesize: null,
+    thumbnail: null,
     error,
     created_at: job.created_at,
     updated_at: new Date().toISOString(),

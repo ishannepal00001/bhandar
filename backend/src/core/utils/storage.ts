@@ -3,6 +3,8 @@
 // Storage.upload(): Streams need `size`, since B2 rejects uploads without a Content-Length.
 // Storage.getFile(): Returns the file's metadata and a short-lived download link. Pass `filename` to make the
 //   browser save it.
+// Storage.signUrl(): Only signs, with no request to B2, so it's cheap enough for every item in a list. It doesn't check
+//   the file exists.
 // encodeKey(): Encodes each segment so the slashes in a key like downloads/<client>/<id>/<file> stay path
 //   separators.
 import { AwsClient } from 'aws4fetch'
@@ -71,21 +73,24 @@ export class Storage {
     if (res.status === 404) throw new StorageError('File not found', 404)
     if (!res.ok) throw new StorageError(`Lookup failed with ${res.status}`)
 
-    const signed = new URL(objectUrl)
+    return {
+      id,
+      size: Number(res.headers.get('Content-Length') ?? 0),
+      contentType: res.headers.get('Content-Type') ?? 'application/octet-stream',
+      lastModified: res.headers.get('Last-Modified') ?? '',
+      url: await this.signUrl(id, filename),
+    }
+  }
+
+  async signUrl(id: string, filename?: string): Promise<string> {
+    const signed = new URL(`${this.base}/${encodeKey(id)}`)
     signed.searchParams.set('X-Amz-Expires', String(this.urlTtlSeconds))
     signed.searchParams.set(
       'response-content-disposition',
       filename ? `attachment; filename*=UTF-8''${encodeURIComponent(filename)}` : 'inline',
     )
     const presigned = await this.client.sign(signed.toString(), { method: 'GET', aws: { signQuery: true } })
-
-    return {
-      id,
-      size: Number(res.headers.get('Content-Length') ?? 0),
-      contentType: res.headers.get('Content-Type') ?? 'application/octet-stream',
-      lastModified: res.headers.get('Last-Modified') ?? '',
-      url: presigned.url,
-    }
+    return presigned.url
   }
 
   async deleteFile(id: string): Promise<void> {

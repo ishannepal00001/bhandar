@@ -1,7 +1,7 @@
 // dashboard: types for the service
 // DashboardStats.storage: Bytes across completed downloads.
 // DashboardStats.failed: Failed and cancelled downloads.
-import type { FinishedJob, QueuedJob } from '../downloads/utils.types'
+import type { QueuedJob, ShownJob } from '../downloads/utils.types'
 
 export type DashboardStats = {
   downloads: number
@@ -13,5 +13,5 @@ export type DashboardStats = {
 export type Dashboard = {
   stats: DashboardStats
   queued: QueuedJob[]
-  recent: FinishedJob[]
+  recent: ShownJob[]
 }
