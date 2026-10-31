@@ -21,3 +21,9 @@ export type FinishedJob = {
 }
 
 export type Job = QueuedJob | FinishedJob
+
+export type DownloadRequest = { url: string }
+
+export type FileLink = { url: string }
+
+export type DeleteResult = { deleted: true }
