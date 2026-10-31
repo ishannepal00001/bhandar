@@ -10,12 +10,14 @@ import {
 import DownloadQueue from '../components/Downloads/DownloadQueue'
 import HeaderActions from '../components/HeaderActions'
 import Marquee from '../components/Marquee'
+import VideoCard from '../components/VideoCard'
+import { config } from '../config'
 import { dashboardFacade } from '../facades/dashboard'
 import { muted, panel } from '../styles'
 import type { Dashboard } from '../types/dashboard'
 import { formatBytes } from '../utils/format'
 
-type Stat = { label: string; value: string; note: string; icon: LucideIcon }
+type Stat = { label: string; value: string; icon: LucideIcon }
 
 const emptyDashboard: Dashboard = {
   stats: { downloads: 0, storage: 0, queued: 0, failed: 0 },
@@ -28,27 +30,22 @@ function DashboardPage() {
   const { stats: totals, queued, recent } = data
 
   const stats: Stat[] = [
-    { label: 'Downloads', value: String(totals.downloads), note: 'saved videos', icon: Download },
-    { label: 'Storage Used', value: formatBytes(totals.storage), note: 'across saved videos', icon: HardDrive },
-    { label: 'In Queue', value: String(totals.queued), note: 'being downloaded', icon: LoaderCircle },
-    { label: 'Failed', value: String(totals.failed), note: 'failed or cancelled', icon: TriangleAlert },
+    { label: 'Downloads', value: String(totals.downloads), icon: Download },
+    { label: 'Storage', value: formatBytes(totals.storage), icon: HardDrive },
+    { label: 'Queued', value: String(totals.queued), icon: LoaderCircle },
+    { label: 'Failed', value: String(totals.failed), icon: TriangleAlert },
   ]
 
   return (
     <div className="min-h-screen bg-background text-primary dark:bg-night-background dark:text-night-primary">
       <main className="mx-auto max-w-7xl space-y-6 px-4 py-6 sm:space-y-8 sm:px-6 sm:py-8">
         <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-          <div>
-            <h1 className="font-serif text-3xl">Dashboard</h1>
-            <p className={`mt-1 text-sm ${muted}`}>
-              An overview of your Facebook video downloads.
-            </p>
-          </div>
+          <h1 className="font-serif text-3xl">Dashboard</h1>
           <HeaderActions />
         </div>
 
         <section className="flex flex-col gap-3 sm:grid sm:grid-cols-2 sm:gap-4 lg:grid-cols-4">
-          {stats.map(({ label, value, note, icon: Icon }) => (
+          {stats.map(({ label, value, icon: Icon }) => (
             <div key={label} className={panel}>
               {/* Mobile: one full-width row per stat */}
               <div className="flex items-center justify-between gap-4 p-4 sm:hidden">
@@ -56,10 +53,7 @@ function DashboardPage() {
                   <span className="flex h-10 w-10 shrink-0 items-center justify-center border border-primary/15 dark:border-night-primary/15">
                     <Icon size={18} className={muted} />
                   </span>
-                  <div className="min-w-0">
-                    <p className={`text-xs uppercase tracking-widest ${muted}`}>{label}</p>
-                    <p className={`mt-0.5 text-xs ${muted}`}>{note}</p>
-                  </div>
+                  <p className={`min-w-0 text-xs uppercase tracking-widest ${muted}`}>{label}</p>
                 </div>
                 <p className="shrink-0 font-serif text-2xl tabular-nums">{value}</p>
               </div>
@@ -71,7 +65,6 @@ function DashboardPage() {
                   <Icon size={18} className={muted} />
                 </div>
                 <p className="mt-2 font-serif text-3xl">{value}</p>
-                <p className={`mt-1 text-sm ${muted}`}>{note}</p>
               </div>
             </div>
           ))}
@@ -91,9 +84,15 @@ function DashboardPage() {
             </Link>
           </div>
           {recent.length === 0 ? (
-            <p className={`text-sm ${muted}`}>Finished downloads will show up here.</p>
-          ) : (
+            <p className={`text-sm ${muted}`}>No downloads yet.</p>
+          ) : recent.length > config.dashboard.marqueeAbove ? (
             <Marquee items={recent} />
+          ) : (
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
+              {recent.map((job) => (
+                <VideoCard key={job.id} job={job} actions={false} />
+              ))}
+            </div>
           )}
         </section>
       </main>

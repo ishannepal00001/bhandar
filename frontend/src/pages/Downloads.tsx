@@ -25,12 +25,7 @@ function Downloads() {
     <div className="min-h-screen bg-background text-primary dark:bg-night-background dark:text-night-primary">
       <main className="mx-auto max-w-7xl space-y-6 px-4 py-6 sm:space-y-8 sm:px-6 sm:py-8">
         <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-          <div>
-            <h1 className="font-serif text-3xl">Downloads</h1>
-            <p className={`mt-1 text-sm ${muted}`}>
-              Paste a Facebook link to download it, and manage everything you’ve saved.
-            </p>
-          </div>
+          <h1 className="font-serif text-3xl">Downloads</h1>
           <HeaderActions />
         </div>
 
