@@ -2,7 +2,6 @@ import { Video, VideoPlayer, VideoSkin } from '@videojs/react/video'
 // Raw text so it skips Tailwind v3's PostCSS pass, which rejects the skin's native @layer rules.
 import skinCss from '@videojs/react/video/skin.css?raw'
 import { useState } from 'react'
-import type { HeadlineFormValues } from '../components/Editor/HeadlineForm.types'
 import ClipCaption from './ClipCaption'
 import ClipToolbar from './ClipToolbar'
 
@@ -29,7 +28,6 @@ const skinTheme = [
 // toolbar is a child of the skin, so it sits inside the player's container: it overlays the video, stays on screen in
 // native fullscreen, and shares the controls' show/hide timing.
 function Editor({ src, onClose }: { src: string; onClose: () => void }) {
-  const [caption, setCaption] = useState<HeadlineFormValues | null>(null)
   const [ratio, setRatio] = useState<number | null>(null)
 
   const frame = ratio
@@ -51,8 +49,8 @@ function Editor({ src, onClose }: { src: string; onClose: () => void }) {
               setRatio(videoWidth && videoHeight ? videoWidth / videoHeight : null)
             }}
           />
-          <ClipCaption caption={caption} />
-          <ClipToolbar onClose={onClose} onCaption={setCaption} />
+          <ClipCaption />
+          <ClipToolbar onClose={onClose} />
         </VideoSkin>
       </VideoPlayer>
     </div>

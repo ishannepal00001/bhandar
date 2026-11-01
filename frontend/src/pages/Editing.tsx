@@ -1,11 +1,14 @@
 // Editing: A video comes from an upload (played from an object URL, freed when it's replaced or the page unmounts) or
-//   from a download (played from its signed B2 link, which needs no freeing).
+//   from a download (played from its signed B2 link, which needs no freeing). Opening one sets it as the clip store's
+//   source, which clears any earlier clips and caption; closing the editor clears them too.
 import { Download, Upload } from 'lucide-react'
 import { useEffect, useRef, useState } from 'react'
 import DownloadPicker from '../components/Editing/DownloadPicker'
 import Modal from '../components/Modal'
 import { Editor } from '../editor'
+import { clipsFacade } from '../facades/clips'
 import { muted } from '../styles'
+import { jobTitle } from '../utils/jobs'
 
 const button = 'flex items-center justify-center gap-2 px-4 py-2.5 text-sm'
 
@@ -29,11 +32,22 @@ function Editing() {
         hidden
         onChange={(e) => {
           const file = e.target.files?.[0]
-          if (file) setVideo({ src: URL.createObjectURL(file), upload: true })
+          if (file) {
+            clipsFacade.setSource({ kind: 'upload', name: file.name })
+            setVideo({ src: URL.createObjectURL(file), upload: true })
+          }
           e.target.value = ''
         }}
       />
-      {src && <Editor src={src} onClose={() => setVideo(null)} />}
+      {src && (
+        <Editor
+          src={src}
+          onClose={() => {
+            clipsFacade.reset()
+            setVideo(null)
+          }}
+        />
+      )}
       {!src && (
         <main className="flex min-h-screen flex-col items-center justify-center px-4 py-12 text-center">
           <h1 className="font-serif text-3xl sm:text-4xl">Editing</h1>
@@ -62,8 +76,9 @@ function Editing() {
       )}
       <Modal open={pickerOpen} onClose={() => setPickerOpen(false)} title="Choose a download">
         <DownloadPicker
-          onPick={(url) => {
+          onPick={(url, job) => {
             setPickerOpen(false)
+            clipsFacade.setSource({ kind: 'download', downloadId: job.id, title: jobTitle(job) })
             setVideo({ src: url, upload: false })
           }}
         />

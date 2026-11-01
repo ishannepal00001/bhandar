@@ -1,6 +1,7 @@
 // HeadlineForm: Asks for the headline, then the details, one step at a time. Both values live here, so going back to
 //   the headline keeps what was typed in the details. Each step's section is keyed on the step so it remounts and plays
-//   its entry animation; Enter on the headline moves on, and only the details step submits.
+//   its entry animation; Enter on the headline moves on, and only the details step submits. initial prefills both
+//   fields when an existing caption is being edited.
 import { ArrowRight, Check } from 'lucide-react'
 import { useState } from 'react'
 import { muted } from '../../styles'
@@ -17,15 +18,17 @@ const primaryButton =
 
 function HeadlineForm({
   onSubmit,
+  initial,
   pending = false,
 }: {
   onSubmit: (values: HeadlineFormValues) => void
+  initial?: HeadlineFormValues | null
   pending?: boolean
 }) {
   const [step, setStep] = useState(0)
   const [direction, setDirection] = useState<'next' | 'prev'>('next')
-  const [headline, setHeadline] = useState('')
-  const [details, setDetails] = useState('')
+  const [headline, setHeadline] = useState(initial?.headline ?? '')
+  const [details, setDetails] = useState(initial?.details ?? '')
 
   const goTo = (next: number) => {
     setDirection(next > step ? 'next' : 'prev')

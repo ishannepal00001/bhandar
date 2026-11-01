@@ -1,18 +1,29 @@
+// ClipToolbar: One button walks through the clips: Create clip (asks for the headline and details first) → Start clip
+//   → End clip → back to Start clip for the next one. The step comes from the clip store rather than local state: a
+//   pending start means End clip, no caption and no clips yet means Create clip, anything else means Start clip.
+//   Beside it, the clip being marked can be cancelled, and Clips opens the list of what the export will render.
+// error: Set when End clip is refused, either before the start or shorter than config.editor.minClipSeconds; cleared
+//   by the next successful step.
+// Rendered inside the skin's container, so usePlayer reads the playback position and the controls' visibility. The
+//   modals are portalled to the body: the skin is a CSS container, which would box a fixed modal into the video's
+//   frame, so native fullscreen is left before one opens. A portal keeps React context, so the modals still read the
+//   player and the clip store.
 import { usePlayer } from '@videojs/react/video'
-import { ArrowLeftToLine, ArrowRightToLine, Scissors, X } from 'lucide-react'
+import { ArrowLeftToLine, ArrowRightToLine, ListVideo, Scissors, X } from 'lucide-react'
 import { useState } from 'react'
 import { createPortal } from 'react-dom'
 import HeadlineForm from '../components/Editor/HeadlineForm'
-import type { HeadlineFormValues } from '../components/Editor/HeadlineForm.types'
 import Modal from '../components/Modal'
+import { config } from '../config'
+import { clipsFacade } from '../facades/clips'
 import { muted } from '../styles'
+import ClipList from './ClipList'
 import { formatDuration } from './format'
+import { totalSeconds } from './timeline'
 
 const surface =
   'pointer-events-auto border border-primary/15 bg-background text-primary dark:border-night-primary/15 dark:bg-night-background dark:text-night-primary'
 
-// One button walks through a clip: Create clip (asks for the headline and details first) → Start clip → End clip →
-// back to Start clip for the next one.
 type Step = 'create' | 'start' | 'end'
 
 const steps = {
@@ -21,55 +32,56 @@ const steps = {
   end: { label: 'End clip', icon: ArrowRightToLine },
 }
 
-type Clip = { start: number; end: number }
+type Dialog = 'caption' | 'clips' | null
 
-// Rendered inside the skin's container, so usePlayer reads the playback position and the controls' visibility. The
-// caption modal is portalled to the body: the skin is a CSS container, which would box a fixed modal into the video's
-// frame, so native fullscreen is left before it opens.
-function ClipToolbar({
-  onClose,
-  onCaption,
-}: {
-  onClose: () => void
-  onCaption: (caption: HeadlineFormValues) => void
-}) {
+const leaveFullscreen = () => {
+  if (document.fullscreenElement) void document.exitFullscreen()
+}
+
+function ClipToolbar({ onClose }: { onClose: () => void }) {
   const currentTime = usePlayer((s) => s.currentTime) ?? 0
   const controlsVisible = usePlayer((s) => s.controlsVisible) ?? true
-  const [step, setStep] = useState<Step>('create')
-  const [start, setStart] = useState<number | null>(null)
-  const [lastClip, setLastClip] = useState<Clip | null>(null)
-  const [error, setError] = useState(false)
-  const [captionOpen, setCaptionOpen] = useState(false)
+  const clips = clipsFacade.useClipStore((state) => state.clips)
+  const caption = clipsFacade.useClipStore((state) => state.caption)
+  const pendingStart = clipsFacade.useClipStore((state) => state.pendingStart)
+  const [error, setError] = useState<string | null>(null)
+  const [dialog, setDialog] = useState<Dialog>(null)
+
+  const step: Step = pendingStart !== null ? 'end' : !caption && clips.length === 0 ? 'create' : 'start'
+
+  const open = (next: Dialog) => {
+    leaveFullscreen()
+    setDialog(next)
+  }
 
   const advance = () => {
     if (step === 'create') {
-      if (document.fullscreenElement) void document.exitFullscreen()
-      setCaptionOpen(true)
+      open('caption')
     } else if (step === 'start') {
-      setStart(currentTime)
-      setError(false)
-      setStep('end')
-    } else if (start !== null && currentTime > start) {
-      setLastClip({ start, end: currentTime })
-      setStart(null)
-      setError(false)
-      setStep('start')
+      clipsFacade.startClip(currentTime)
+      setError(null)
+    } else if (clipsFacade.endClip(currentTime)) {
+      setError(null)
     } else {
-      setError(true)
+      setError(
+        pendingStart !== null && currentTime <= pendingStart
+          ? 'End must come after start'
+          : `Clips must be at least ${config.editor.minClipSeconds}s`,
+      )
     }
   }
 
   const { label, icon: Icon } = steps[step]
-  const status = error
-    ? 'End must come after start'
-    : step === 'end' && start !== null
-      ? `From ${formatDuration(start)}`
-      : lastClip && `${formatDuration(lastClip.start)} → ${formatDuration(lastClip.end)}`
+  const status =
+    error ??
+    (pendingStart !== null
+      ? `From ${formatDuration(pendingStart)}`
+      : clips.length > 0 && `${clips.length} · ${formatDuration(totalSeconds(clips))}`)
 
   return (
     <>
       <div
-        className={`pointer-events-none absolute inset-x-0 top-0 z-10 flex items-start justify-between gap-2 p-2 transition-opacity duration-200 sm:p-4 ${
+        className={`pointer-events-none absolute inset-x-0 top-0 z-20 flex items-start justify-between gap-2 p-2 transition-opacity duration-200 sm:p-4 ${
           controlsVisible ? 'opacity-100' : 'opacity-0 [&:not(:focus-within)_*]:pointer-events-none'
         }`}
       >
@@ -77,41 +89,72 @@ function ClipToolbar({
           <button
             type="button"
             onClick={advance}
-            className="flex items-center justify-center gap-2 bg-primary px-4 py-1.5 text-sm text-background hover:bg-primary/90 dark:bg-night-primary dark:text-night-background dark:hover:bg-night-primary/90"
+            className="flex shrink-0 items-center justify-center gap-2 bg-primary px-4 py-1.5 text-sm text-background hover:bg-primary/90 dark:bg-night-primary dark:text-night-background dark:hover:bg-night-primary/90"
           >
             <Icon size={15} />
             {label}
           </button>
           {status && (
             <p
-              className={`truncate pr-1.5 text-xs tabular-nums ${
-                error ? 'text-accent dark:text-night-accent' : muted
-              }`}
+              className={`truncate text-xs tabular-nums ${error ? 'text-accent dark:text-night-accent' : muted}`}
             >
               {status}
             </p>
           )}
+          {pendingStart !== null && (
+            <button
+              type="button"
+              onClick={() => {
+                clipsFacade.cancelClip()
+                setError(null)
+              }}
+              className={`shrink-0 pr-1.5 text-xs underline underline-offset-4 hover:text-primary dark:hover:text-night-primary ${muted}`}
+            >
+              Cancel
+            </button>
+          )}
         </div>
-        <button
-          type="button"
-          onClick={onClose}
-          aria-label="Close video"
-          title="Close video"
-          className={`p-2 text-primary/70 hover:text-primary dark:text-night-primary/70 dark:hover:text-night-primary ${surface}`}
-        >
-          <X size={18} />
-        </button>
+        <div className="flex shrink-0 gap-2">
+          <button
+            type="button"
+            onClick={() => open('clips')}
+            aria-label="Clips"
+            title="Clips"
+            className={`flex items-center gap-1.5 p-2 text-sm tabular-nums text-primary/70 hover:text-primary dark:text-night-primary/70 dark:hover:text-night-primary ${surface}`}
+          >
+            <ListVideo size={18} />
+            {clips.length > 0 && <span className="pr-0.5">{clips.length}</span>}
+          </button>
+          <button
+            type="button"
+            onClick={onClose}
+            aria-label="Close video"
+            title="Close video"
+            className={`p-2 text-primary/70 hover:text-primary dark:text-night-primary/70 dark:hover:text-night-primary ${surface}`}
+          >
+            <X size={18} />
+          </button>
+        </div>
       </div>
       {createPortal(
-        <Modal open={captionOpen} onClose={() => setCaptionOpen(false)} title="Create clip">
-          <HeadlineForm
-            onSubmit={(caption) => {
-              onCaption(caption)
-              setCaptionOpen(false)
-              setStep('start')
-            }}
-          />
-        </Modal>,
+        <>
+          <Modal
+            open={dialog === 'caption'}
+            onClose={() => setDialog(null)}
+            title={caption ? 'Edit caption' : 'Create clip'}
+          >
+            <HeadlineForm
+              initial={caption}
+              onSubmit={(values) => {
+                clipsFacade.setCaption(values)
+                setDialog(null)
+              }}
+            />
+          </Modal>
+          <Modal open={dialog === 'clips'} onClose={() => setDialog(null)} title="Clips">
+            <ClipList onEditCaption={() => setDialog('caption')} />
+          </Modal>
+        </>,
         document.body,
       )}
     </>

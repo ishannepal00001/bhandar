@@ -43,7 +43,7 @@ This README covers the whole project: how the backend and frontend are built, ho
 | Backend: dashboard | Done. `GET /api/v1/dashboard` returns the stats, the queued jobs and the latest finished ones |
 | fetchr (Python `yt-dlp` service on Render) | **Not built yet.** Its contract is defined in [backend/API.md](backend/API.md#upstream-fetchr). Until it exists, no video actually downloads |
 | Frontend: UI | Done. Login page, dashboard, downloads page, queue, download modal, collapsible sidebar, light and dark themes |
-| Frontend: editing | UI only. The Editing page opens an uploaded file in a full-screen video.js player with a clip toolbar. Clips aren't cut or saved, and "Use downloads" does nothing yet |
+| Frontend: editing | Clips and caption done in the browser. The Editing page opens a download or an uploaded file in the editor, where you mark clips, order them, and add a news-style caption that previews the export's timing. Exporting them as one video isn't built yet (it needs fetchr's render endpoint) |
 | Frontend: API calls | Wired up. Login, the dashboard, the downloads list, the download form, and save and delete all call the backend; the lists refresh live over SSE. The queue's cancel button and Create clip still do nothing (there is no cancel endpoint) |
 
 ## Architecture
@@ -364,22 +364,29 @@ Everything for editing lives in `src/editor/`, and pages import it from `src/edi
 
 | File | Does |
 |---|---|
-| `Editor.tsx` | Covers the whole viewport over the app on a black background and renders the Video.js player (`VideoPlayer`, `VideoSkin`, `Video` from `@videojs/react/video`). The video is scaled to fit. The player's own fullscreen button still works |
-| `ClipToolbar.tsx` | Floats over the top left of the video, with a close button at the top right. It's a child of the skin, so it sits inside the player's container: it stays on screen in native fullscreen and fades in and out with the player's controls (`controlsVisible`) |
+| `Editor.tsx` | Covers the whole viewport over the app on a black background and renders the Video.js player (`VideoPlayer`, `VideoSkin`, `Video` from `@videojs/react/video`). The player is framed to the video's own aspect ratio, so the controls, toolbar and caption sit on the picture. The player's own fullscreen button still works |
+| `ClipToolbar.tsx` | Floats over the top left of the video, with the Clips and close buttons at the top right. It's a child of the skin, so it sits inside the player's container: it stays on screen in native fullscreen and fades in and out with the player's controls (`controlsVisible`). Its popups (the caption stepper and the clip list) are portalled to the body |
+| `ClipCaption.tsx` | The news-style caption over the video: the headline in Montserrat ExtraBold with a gold bar per line, bold cream details below, on a full-width dark panel. It previews the export's timing (below) |
+| `ClipList.tsx` | The Clips popup: the caption (with Add or Edit), and the clips in output order with their times and lengths, which move up or down or can be removed, plus the total length |
+| `timeline.ts` | Maps the playback position onto the exported video's time, totals the clips, and works out the caption's opacity |
 | `format.ts` | Formats times as `m:ss.s` or `h:mm:ss.s` |
 | `index.ts` | Exports `Editor` |
 
-The toolbar has one button that walks through a clip:
+What will be exported lives in `useClipStore` (through `clipsFacade`): the source video (a download's id, or an uploaded file's name), the clips in output order, the start of the clip being marked, and the caption. Opening a video replaces it all, and closing the editor clears it. The export joins the clips, in that order, into a single video.
+
+The toolbar has one button that walks through the clips. Its step comes from the store:
 
 | Button shows | Pressing it | Then shows |
 |---|---|---|
-| **Create clip** (first time only) | starts clipping | Start clip |
+| **Create clip** (no caption and no clips yet) | opens the headline → details stepper | Start clip, once the caption is saved |
 | **Start clip** | marks the start at the current playback time | End clip |
-| **End clip** | marks the end and completes the clip | Start clip, for the next one |
+| **End clip** | marks the end and adds the clip to the list | Start clip, for the next one |
 
-Next to the button, a readout shows `From <start>` while you choose the end, then the last clip's range. Pressing End at or before the start shows a warning and stays on End clip. Clips aren't saved or cut anywhere yet.
+Next to the button, a readout shows `From <start>` (with Cancel) while you choose the end, then the clip count and total length. Ending a clip at or before its start, or shorter than `config.editor.minClipSeconds`, shows a warning and stays on End clip.
 
-The chosen file plays from an object URL in the browser, nothing is uploaded, and the URL is freed when the editor closes.
+The caption runs on the exported video's time: it shows from the start of the first clip, fully for `config.editor.caption.holdSeconds`, then fades out over `fadeSeconds`. While playing the source, the playhead is mapped through the clips, so pausing freezes the fade, seeking back brings it back, and outside every clip (which isn't in the export) it hides. Before any clip is marked it shows in full. Nothing is rendered or uploaded yet; that's the export's job.
+
+An uploaded file plays from an object URL in the browser, nothing is uploaded, and the URL is freed when the editor closes.
 
 **Theming the player.** The packaged skin's public settings set the accent to the app's gold, square corners, no border and the app font. Its internal variables, which aren't a documented API, give the control bar, menus and popups the app background and text colours, square corners, and no blur, gradient or shadow. Because of those internal variables, `@videojs/react` is pinned to exactly `10.2.0`; check the player after any upgrade. Two pieces may still render rounded: the seek slider's track outline and its drag handle.
 
@@ -387,12 +394,13 @@ The chosen file plays from an object URL in the browser, nothing is uploaded, an
 
 ### State
 
-Global UI state is in two small Zustand stores:
+Global state the server doesn't own is in small Zustand stores:
 
 | Store | State |
 |---|---|
 | `useSidebarStore` | `collapsed` (persisted to `localStorage` under `sidebar`) and `mobileOpen` |
 | `useDownloadModalStore` | `open` |
+| `useClipStore` | the export's source video, clips, pending clip start and caption (see [Clip editor](#clip-editor)); reached through `clipsFacade` |
 
 Form state is local `useState`. `hooks/useMediaQuery` wraps `matchMedia` in `useSyncExternalStore`, and the sidebar uses it to tell desktop from mobile.
 
