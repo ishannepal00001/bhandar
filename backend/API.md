@@ -452,3 +452,55 @@ A fetchr download (`fetchrDownloadSchema` in `modules/downloads/utils.ts`):
 ```
 
 Each alarm polls at most `DOWNLOAD_MAX_QUEUED` jobs. A poll fails on any non-2xx status, timeout, missing next code, or reply that doesn't match this shape. A failed poll is retried on the next alarm, up to `DOWNLOAD_MAX_POLL_FAILURES` times in a row.
+
+### Renders (clip export)
+
+The clip editor's export will use fetchr's render endpoints: one source video already in B2, several clips cut from it, joined in order into **one MP4**, with the caption burned in. The Worker doesn't call them yet; this is the contract it will be built against (fetchr's README has the full reference).
+
+| Method | Path | Body | Reply |
+|---|---|---|---|
+| POST | `/api/v1/renders` | a render request (below) | `202`, a fetchr download |
+| GET | `/api/v1/renders/{id}` | none | a fetchr download, or `404` |
+
+The same auth headers and rolling code apply.
+
+A render request:
+
+```ts
+{
+  source_key: string                       // a download's B2 key: downloads/<client_id>/<download_id>/<filename>
+  clips: { start: number; end: number }[]  // seconds into the source, in output order; 1–20, may overlap
+  caption?: {                              // optional; null or missing = no caption
+    headline: string                       // 1–200 chars, not blank
+    details: string                        // 1–600 chars, may contain \n
+    hold?: number                          // seconds fully visible, 0–600, default 6
+    fade?: number                          // seconds to fade out after hold, 0–60, default 1.5
+  } | null
+}
+```
+
+- `source_key` must start with `downloads/<DOWNLOADER_CLIENT_ID>/`, with no `.`, `..` or empty segments. The Worker builds it from the download's stored `filename` key, never from the browser.
+- Each clip's `end` is at least `0.5` after its `start` (the frontend's `config.editor.minClipSeconds`). The clips add up to at most fetchr's `FETCHR_RENDER_MAX_SECONDS` (default 600). Breaking either of these, or the source key rule, gets a `422` with `{ "detail": "<message>" }`.
+- A clip that ends more than 0.1s past the source's end isn't refused up front. The job fails with `error: "Clip ends after the video does"`.
+
+The reply has exactly the shape of a fetchr download, so `fetchrDownloadSchema` parses it unchanged:
+
+| Field | For a render |
+|---|---|
+| `source_url` | the `source_key` |
+| `status` | `queued` → `downloading` (fetching the source and rendering) → `uploading` → `verifying` → `completed` or `failed` |
+| `title` | `null` |
+| `filename`, `content_type`, `filesize` | `"clip.mp4"`, `"video/mp4"` and the size in bytes, once rendered |
+| `thumbnail` | `"thumbnail.jpg"` (the output's first frame) on `completed`, else `null` |
+| `error` | on `failed`, a short message such as `Clip ends after the video does`, `Source video not found` or `ffmpeg could not render the video` |
+
+The output is written to `renders/<client_id>/<id>/clip.mp4` in B2, not `downloads/…`, so the key the Worker builds for a finished render uses the `renders/` prefix. Renders never show up in fetchr's download endpoints, and a render id gets `404` there (and the other way round).
+
+The caption is shown from the start of the output, not of each clip. It's fully visible for `hold` seconds, then its alpha fades out over `fade` seconds. The editor previews the same timing (`frontend/src/editor/timeline.ts`).
+
+**Known gaps in fetchr's caption.** It doesn't match the editor's preview yet:
+
+- **Look:** fetchr draws a full-width red headline bar with white left-aligned text, and the details on a black bar below. The preview has a gold bar per headline line with navy text, cream details, everything centred, and soft shadows.
+- **Fonts:** fetchr uses DejaVu Sans, not Montserrat and Noto Sans Devanagari.
+- **Nepali:** ffmpeg 5.1's `drawtext` doesn't shape Devanagari, and line widths are estimated for Latin, so Nepali text renders incorrectly.
+- **Changed text:** a caption taller than half the frame gets smaller fonts, and as a last resort its trailing detail lines are cut and end in `…`. So the rendered text can differ from what was typed.
