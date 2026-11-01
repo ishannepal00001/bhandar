@@ -498,9 +498,9 @@ The output is written to `renders/<client_id>/<id>/clip.mp4` in B2, not `downloa
 
 The caption is shown from the start of the output, not of each clip. It's fully visible for `hold` seconds, then its alpha fades out over `fade` seconds. The editor previews the same timing (`frontend/src/editor/timeline.ts`).
 
-**Known gaps in fetchr's caption.** It doesn't match the editor's preview yet:
+**The caption fetchr draws** matches the editor's preview (`frontend/src/editor/ClipCaption.tsx`):
 
-- **Look:** fetchr draws a full-width red headline bar with white left-aligned text, and the details on a black bar below. The preview has a gold bar per headline line with navy text, cream details, everything centred, and soft shadows.
-- **Fonts:** fetchr uses DejaVu Sans, not Montserrat and Noto Sans Devanagari.
-- **Nepali:** ffmpeg 5.1's `drawtext` doesn't shape Devanagari, and line widths are estimated for Latin, so Nepali text renders incorrectly.
-- **Changed text:** a caption taller than half the frame gets smaller fonts, and as a last resort its trailing detail lines are cut and end in `…`. So the rendered text can differ from what was typed.
+- **Look:** a full-width panel of black at 60%. The headline is navy on a gold bar per wrapped line, each bar as wide as its line, with a soft shadow. The details are cream with a soft shadow. Everything is centred, and sizes are fractions of the video width, like the preview's `cqw` units.
+- **Fonts:** Montserrat ExtraBold for the headline and Bold for the details. Nepali uses Noto Sans Devanagari, shaped with libraqm so joined letters and vowel signs render correctly. Lines that mix English and Nepali switch font as they go.
+- **Text:** never cut. The headline collapses extra whitespace and the details keep their line breaks, as in the preview. A caption taller than half the frame shrinks as a whole until it fits.
+- **Differences from the preview:** the rendered caption sits flush on the bottom edge, since the preview only lifts it to clear the player's controls. Shrinking a very long caption to fit has no equivalent in the preview.
