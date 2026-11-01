@@ -1,3 +1,6 @@
+// HeaderActions: Create clip goes to the Editing page, where a video is picked and the clip editor asks for the
+//   headline and details.
+import { Link } from '@tanstack/react-router'
 import { Download, Scissors } from 'lucide-react'
 import { useDownloadModalStore } from '../stores/useDownloadModalStore'
 
@@ -16,13 +19,13 @@ function HeaderActions() {
         <Download size={16} />
         Create download
       </button>
-      <button
-        type="button"
+      <Link
+        to="/editing"
         className={`${button} border border-primary/30 hover:border-primary dark:border-night-primary/30 dark:hover:border-night-primary`}
       >
         <Scissors size={16} />
         Create clip
-      </button>
+      </Link>
     </div>
   )
 }

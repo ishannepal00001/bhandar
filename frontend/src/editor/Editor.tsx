@@ -1,6 +1,9 @@
 import { Video, VideoPlayer, VideoSkin } from '@videojs/react/video'
 // Raw text so it skips Tailwind v3's PostCSS pass, which rejects the skin's native @layer rules.
 import skinCss from '@videojs/react/video/skin.css?raw'
+import { useState } from 'react'
+import type { HeadlineFormValues } from '../components/Editor/HeadlineForm.types'
+import ClipCaption from './ClipCaption'
 import ClipToolbar from './ClipToolbar'
 
 // Public skin settings (accent, border, radius, font), then the skin's internal surface, text and radius variables,
@@ -23,6 +26,8 @@ const skinTheme = [
 // Fills the viewport over the app. The toolbar is a child of the skin, so it sits inside the player's container: it
 // overlays the video, stays on screen in native fullscreen, and shares the controls' show/hide timing.
 function Editor({ src, onClose }: { src: string; onClose: () => void }) {
+  const [caption, setCaption] = useState<HeadlineFormValues | null>(null)
+
   return (
     <div className="fixed inset-0 z-50 bg-black">
       <style href="videojs-video-skin" precedence="default">
@@ -31,7 +36,8 @@ function Editor({ src, onClose }: { src: string; onClose: () => void }) {
       <VideoPlayer>
         <VideoSkin style={{ width: '100%', height: '100%' }} className={skinTheme}>
           <Video src={src} playsInline />
-          <ClipToolbar onClose={onClose} />
+          <ClipCaption caption={caption} />
+          <ClipToolbar onClose={onClose} onCaption={setCaption} />
         </VideoSkin>
       </VideoPlayer>
     </div>
