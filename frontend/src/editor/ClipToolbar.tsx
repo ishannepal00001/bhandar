@@ -1,6 +1,7 @@
 import { usePlayer } from '@videojs/react/video'
 import { ArrowLeftToLine, ArrowRightToLine, Scissors, X } from 'lucide-react'
 import { useState } from 'react'
+import { createPortal } from 'react-dom'
 import HeadlineForm from '../components/Editor/HeadlineForm'
 import type { HeadlineFormValues } from '../components/Editor/HeadlineForm.types'
 import Modal from '../components/Modal'
@@ -23,8 +24,8 @@ const steps = {
 type Clip = { start: number; end: number }
 
 // Rendered inside the skin's container, so usePlayer reads the playback position and the controls' visibility. The
-// caption modal sits outside the fading bar so hidden controls can't fade it, and inside the skin so it shows in
-// fullscreen.
+// caption modal is portalled to the body: the skin is a CSS container, which would box a fixed modal into the video's
+// frame, so native fullscreen is left before it opens.
 function ClipToolbar({
   onClose,
   onCaption,
@@ -42,6 +43,7 @@ function ClipToolbar({
 
   const advance = () => {
     if (step === 'create') {
+      if (document.fullscreenElement) void document.exitFullscreen()
       setCaptionOpen(true)
     } else if (step === 'start') {
       setStart(currentTime)
@@ -100,15 +102,18 @@ function ClipToolbar({
           <X size={18} />
         </button>
       </div>
-      <Modal open={captionOpen} onClose={() => setCaptionOpen(false)} title="Create clip">
-        <HeadlineForm
-          onSubmit={(caption) => {
-            onCaption(caption)
-            setCaptionOpen(false)
-            setStep('start')
-          }}
-        />
-      </Modal>
+      {createPortal(
+        <Modal open={captionOpen} onClose={() => setCaptionOpen(false)} title="Create clip">
+          <HeadlineForm
+            onSubmit={(caption) => {
+              onCaption(caption)
+              setCaptionOpen(false)
+              setStep('start')
+            }}
+          />
+        </Modal>,
+        document.body,
+      )}
     </>
   )
 }

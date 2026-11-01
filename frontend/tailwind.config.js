@@ -4,6 +4,10 @@ export default {
   content: ["./src/**/*.{html,js,jsx,ts,tsx}"],
   theme: {
     extend: {
+      fontFamily: {
+        // clip captions on the video; Noto covers Devanagari, which Montserrat lacks
+        caption: ["Montserrat", "Noto Sans Devanagari", "Impact", "Arial Narrow", "sans-serif"],
+      },
       colors: {
         // light
         primary: "#0B2350",

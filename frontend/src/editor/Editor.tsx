@@ -23,19 +23,34 @@ const skinTheme = [
   'dark:[--media-surface-border:theme(colors.night.primary/15%)]',
 ].join(' ')
 
-// Fills the viewport over the app. The toolbar is a child of the skin, so it sits inside the player's container: it
-// overlays the video, stays on screen in native fullscreen, and shares the controls' show/hide timing.
+// Covers the viewport over the app, and frames the player to the video's own aspect ratio inside it: the overlay is a
+// size container, and the skin takes whichever of its width or height runs out first, so the controls, toolbar and
+// caption sit on the picture rather than on black bars. Until the metadata loads, the skin fills the overlay. The
+// toolbar is a child of the skin, so it sits inside the player's container: it overlays the video, stays on screen in
+// native fullscreen, and shares the controls' show/hide timing.
 function Editor({ src, onClose }: { src: string; onClose: () => void }) {
   const [caption, setCaption] = useState<HeadlineFormValues | null>(null)
+  const [ratio, setRatio] = useState<number | null>(null)
+
+  const frame = ratio
+    ? { width: `min(100cqw, ${100 * ratio}cqh)`, height: `min(100cqh, ${100 / ratio}cqw)` }
+    : { width: '100%', height: '100%' }
 
   return (
-    <div className="fixed inset-0 z-50 bg-black">
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black p-2 [container-type:size] sm:p-6">
       <style href="videojs-video-skin" precedence="default">
         {skinCss}
       </style>
       <VideoPlayer>
-        <VideoSkin style={{ width: '100%', height: '100%' }} className={skinTheme}>
-          <Video src={src} playsInline />
+        <VideoSkin style={frame} className={skinTheme}>
+          <Video
+            src={src}
+            playsInline
+            onLoadedMetadata={(e) => {
+              const { videoWidth, videoHeight } = e.currentTarget
+              setRatio(videoWidth && videoHeight ? videoWidth / videoHeight : null)
+            }}
+          />
           <ClipCaption caption={caption} />
           <ClipToolbar onClose={onClose} onCaption={setCaption} />
         </VideoSkin>
