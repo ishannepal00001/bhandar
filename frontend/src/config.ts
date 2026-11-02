@@ -5,7 +5,9 @@
 //   a grid, since a marquee of one or two cards just repeats them.
 // editor.caption: The caption shows from the start of the exported video, fully visible for holdSeconds of playback,
 //   then fades out over fadeSeconds. The export sends the same values, so the preview matches the render.
-// editor.minClipSeconds: Shorter clips are refused; fetchr won't render them.
+// editor.minClipSeconds, maxClips, maxSeconds: The export's limits: the clip length, the number of clips, and their
+//   total. They mirror the Worker's EXPORT_MIN_CLIP_SECONDS, EXPORT_MAX_CLIPS and EXPORT_MAX_SECONDS, which refuse
+//   anything outside them, so the editor can say why before sending.
 export const config = {
   api: {
     baseUrl: '',
@@ -26,5 +28,7 @@ export const config = {
       fadeSeconds: 1.5,
     },
     minClipSeconds: 0.5,
+    maxClips: 20,
+    maxSeconds: 600,
   },
 } as const

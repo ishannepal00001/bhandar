@@ -1,15 +1,17 @@
-// Layout: Listens to the download events here, once, so every page under it stays fresh as jobs finish.
+// Layout: Listens to the download and export events here, once, so every page under it stays fresh as jobs finish.
 import { Outlet } from '@tanstack/react-router'
 import { Menu } from 'lucide-react'
 import DownloadForm from './components/Downloads/DownloadForm'
 import Modal from './components/Modal'
 import Sidebar from './components/Sidebar'
 import { downloadsFacade } from './facades/downloads'
+import { exportsFacade } from './facades/exports'
 import { useDownloadModalStore } from './stores/useDownloadModalStore'
 import { useSidebarStore } from './stores/useSidebarStore'
 
 function Layout() {
   downloadsFacade.useDownloadEvents()
+  exportsFacade.useExportEvents()
   const setMobileOpen = useSidebarStore((state) => state.setMobileOpen)
   const downloadModalOpen = useDownloadModalStore((state) => state.open)
   const setDownloadModalOpen = useDownloadModalStore((state) => state.setOpen)

@@ -1,7 +1,11 @@
 // ClipToolbar: One button walks through the clips: Create clip (asks for the headline and details first) → Start clip
 //   → End clip → back to Start clip for the next one. The step comes from the clip store rather than local state: a
 //   pending start means End clip, no caption and no clips yet means Create clip, anything else means Start clip.
-//   Beside it, the clip being marked can be cancelled, and Clips opens the list of what the export will render.
+//   Around it: Close, Clips (the list of what the export will render, with the Export button) and the clip being
+//   marked can be cancelled.
+// Layout: Everything sits in one group at the top left, capped short of the top-right corner. On a narrow (portrait)
+//   video the skin moves its cast, picture-in-picture and fullscreen buttons up there, and they would cover anything
+//   placed in that corner.
 // error: Set when End clip is refused, either before the start or shorter than config.editor.minClipSeconds; cleared
 //   by the next successful step.
 // Rendered inside the skin's container, so usePlayer reads the playback position and the controls' visibility. The
@@ -20,6 +24,9 @@ import { muted } from '../styles'
 import ClipList from './ClipList'
 import { formatDuration } from './format'
 import { totalSeconds } from './timeline'
+
+const iconButton =
+  'shrink-0 p-1.5 text-primary/70 hover:text-primary dark:text-night-primary/70 dark:hover:text-night-primary'
 
 const surface =
   'pointer-events-auto border border-primary/15 bg-background text-primary dark:border-night-primary/15 dark:bg-night-background dark:text-night-primary'
@@ -81,22 +88,35 @@ function ClipToolbar({ onClose }: { onClose: () => void }) {
   return (
     <>
       <div
-        className={`pointer-events-none absolute inset-x-0 top-0 z-20 flex items-start justify-between gap-2 p-2 transition-opacity duration-200 sm:p-4 ${
+        className={`pointer-events-none absolute inset-x-0 top-0 z-20 flex p-2 transition-opacity duration-200 sm:p-4 ${
           controlsVisible ? 'opacity-100' : 'opacity-0 [&:not(:focus-within)_*]:pointer-events-none'
         }`}
       >
-        <div className={`flex min-w-0 items-center gap-3 p-1.5 ${surface}`}>
+        <div className={`flex min-w-0 max-w-[calc(100%-9rem)] items-center gap-1.5 p-1.5 ${surface}`}>
+          <button type="button" onClick={onClose} aria-label="Close video" title="Close video" className={iconButton}>
+            <X size={17} />
+          </button>
           <button
             type="button"
             onClick={advance}
-            className="flex shrink-0 items-center justify-center gap-2 bg-primary px-4 py-1.5 text-sm text-background hover:bg-primary/90 dark:bg-night-primary dark:text-night-background dark:hover:bg-night-primary/90"
+            className="ml-1 flex shrink-0 items-center justify-center gap-2 bg-primary px-4 py-1.5 text-sm text-background hover:bg-primary/90 dark:bg-night-primary dark:text-night-background dark:hover:bg-night-primary/90"
           >
             <Icon size={15} />
             {label}
           </button>
+          <button
+            type="button"
+            onClick={() => open('clips')}
+            aria-label="Clips and export"
+            title="Clips and export"
+            className={`flex items-center gap-1 tabular-nums ${iconButton}`}
+          >
+            <ListVideo size={17} />
+            {clips.length > 0 && <span className="text-sm">{clips.length}</span>}
+          </button>
           {status && (
             <p
-              className={`truncate text-xs tabular-nums ${error ? 'text-accent dark:text-night-accent' : muted}`}
+              className={`truncate pl-1 text-xs tabular-nums ${error ? 'text-accent dark:text-night-accent' : muted}`}
             >
               {status}
             </p>
@@ -108,32 +128,11 @@ function ClipToolbar({ onClose }: { onClose: () => void }) {
                 clipsFacade.cancelClip()
                 setError(null)
               }}
-              className={`shrink-0 pr-1.5 text-xs underline underline-offset-4 hover:text-primary dark:hover:text-night-primary ${muted}`}
+              className={`shrink-0 pl-1 pr-1.5 text-xs underline underline-offset-4 hover:text-primary dark:hover:text-night-primary ${muted}`}
             >
               Cancel
             </button>
           )}
-        </div>
-        <div className="flex shrink-0 gap-2">
-          <button
-            type="button"
-            onClick={() => open('clips')}
-            aria-label="Clips"
-            title="Clips"
-            className={`flex items-center gap-1.5 p-2 text-sm tabular-nums text-primary/70 hover:text-primary dark:text-night-primary/70 dark:hover:text-night-primary ${surface}`}
-          >
-            <ListVideo size={18} />
-            {clips.length > 0 && <span className="pr-0.5">{clips.length}</span>}
-          </button>
-          <button
-            type="button"
-            onClick={onClose}
-            aria-label="Close video"
-            title="Close video"
-            className={`p-2 text-primary/70 hover:text-primary dark:text-night-primary/70 dark:hover:text-night-primary ${surface}`}
-          >
-            <X size={18} />
-          </button>
         </div>
       </div>
       {createPortal(
@@ -151,8 +150,8 @@ function ClipToolbar({ onClose }: { onClose: () => void }) {
               }}
             />
           </Modal>
-          <Modal open={dialog === 'clips'} onClose={() => setDialog(null)} title="Clips">
-            <ClipList onEditCaption={() => setDialog('caption')} />
+          <Modal open={dialog === 'clips'} onClose={() => setDialog(null)} title="Clips and export">
+            <ClipList onEditCaption={() => setDialog('caption')} onExported={() => setDialog(null)} />
           </Modal>
         </>,
         document.body,

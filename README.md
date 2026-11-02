@@ -44,7 +44,7 @@ This README covers the whole project: how the backend and frontend are built, ho
 | Backend: exports | Done on the Worker side. Queues clip renders on fetchr from the same Durable Object, stores finished ones in D1, pushes them over SSE, serves B2 links, deletes |
 | fetchr (Python `yt-dlp` + `ffmpeg` service on Render) | Built in its own repo: downloads, thumbnails, and renders (clips joined into one MP4 with the caption burned in). Its contract is in [backend/API.md](backend/API.md#upstream-fetchr) |
 | Frontend: UI | Done. Login page, dashboard, downloads page, queue, download modal, collapsible sidebar, light and dark themes |
-| Frontend: editing | Clips and caption done in the browser. The Editing page opens a download or an uploaded file in the editor, where you mark clips, order them, and add a news-style caption that previews the export's timing. The backend can export them as one video; the editor's Export button isn't built yet |
+| Frontend: editing | Done for downloads. The Editing page opens a download or an uploaded file in the editor, where you mark clips, order them, and add a news-style caption that previews the export's timing. **Export video** renders them into one MP4 through fetchr; the page lists exports as they render and finish, to save or delete. Uploaded files can be clipped but not exported yet (they'd need uploading to B2 first) |
 | Frontend: API calls | Wired up. Login, the dashboard, the downloads list, the download form, and save and delete all call the backend; the lists refresh live over SSE. The queue's cancel button and Create clip still do nothing (there is no cancel endpoint) |
 
 ## Architecture
@@ -364,7 +364,7 @@ The router type is registered with TanStack's `Register` interface, so `<Link to
 | Auth | `/auth` | A two-step login: `PasswordForm`, then `CodeForm`. A `Stepper` shows progress and each step slides in from the side it came from (turned off for reduced motion) |
 | Dashboard | `/` | Header actions; four stats computed from the jobs (saved videos, storage used, number queued, failed or cancelled); the queue; a scrolling marquee of the six most recent finished downloads, with a link to the downloads page |
 | Downloads | `/downloads` | Header actions; the download form; the queue; every finished download in a grid, filterable by All / Done / Failed / Cancelled |
-| Editing | `/editing` | A centred title, short description, and two buttons: **Use downloads** (not wired yet) and **Upload videos**, which opens a file picker and shows the chosen file in the [clip editor](#clip-editor) |
+| Editing | `/editing` | A centred title, short description, and two buttons: **Use downloads**, which picks a completed download, and **Upload videos**, which opens a file picker; either opens the [clip editor](#clip-editor). Below them, **Exports** (`ExportList`, loaded by the route): a card per export with its thumbnail, the source's title, the caption's headline, clip count, length and status (**Rendering** with a spinner until fetchr finishes), and save and delete once it's done |
 
 ### Components
 
@@ -387,9 +387,9 @@ Everything for editing lives in `src/editor/`, and pages import it from `src/edi
 | File | Does |
 |---|---|
 | `Editor.tsx` | Covers the whole viewport over the app on a black background and renders the Video.js player (`VideoPlayer`, `VideoSkin`, `Video` from `@videojs/react/video`). The player is framed to the video's own aspect ratio, so the controls, toolbar and caption sit on the picture. The player's own fullscreen button still works |
-| `ClipToolbar.tsx` | Floats over the top left of the video, with the Clips and close buttons at the top right. It's a child of the skin, so it sits inside the player's container: it stays on screen in native fullscreen and fades in and out with the player's controls (`controlsVisible`). Its popups (the caption stepper and the clip list) are portalled to the body |
+| `ClipToolbar.tsx` | Floats over the top left of the video: Close, the clip button, Clips, and the readout, in one group that stops short of the top-right corner, where the skin puts its cast, picture-in-picture and fullscreen buttons on narrow (portrait) videos. It's a child of the skin, so it sits inside the player's container: it stays on screen in native fullscreen and fades in and out with the player's controls (`controlsVisible`). Its popups (the caption stepper and the clip list) are portalled to the body |
 | `ClipCaption.tsx` | The news-style caption over the video: the headline in Montserrat ExtraBold with a gold bar per line, bold cream details below, on a full-width dark panel. It previews the export's timing (below) |
-| `ClipList.tsx` | The Clips popup: the caption (with Add or Edit), and the clips in output order with their times and lengths, which move up or down or can be removed, plus the total length |
+| `ClipList.tsx` | The Clips and export popup: the caption (with Add or Edit), the clips in output order with their times and lengths, which move up or down or can be removed, the total length, and **Export video**. Export says why it's unavailable (an uploaded video, no clips, a clip still being marked, or over `config.editor.maxClips` / `maxSeconds`) before anything is sent |
 | `timeline.ts` | Maps the playback position onto the exported video's time, totals the clips, and works out the caption's opacity |
 | `format.ts` | Formats times as `m:ss.s` or `h:mm:ss.s` |
 | `index.ts` | Exports `Editor` |
@@ -406,7 +406,9 @@ The toolbar has one button that walks through the clips. Its step comes from the
 
 Next to the button, a readout shows `From <start>` (with Cancel) while you choose the end, then the clip count and total length. Ending a clip at or before its start, or shorter than `config.editor.minClipSeconds`, shows a warning and stays on End clip.
 
-The caption runs on the exported video's time: it shows from the start of the first clip, fully for `config.editor.caption.holdSeconds`, then fades out over `fadeSeconds`. While playing the source, the playhead is mapped through the clips, so pausing freezes the fade, seeking back brings it back, and outside every clip (which isn't in the export) it hides. Before any clip is marked it shows in full. Nothing is rendered or uploaded yet; that's the export's job.
+The caption runs on the exported video's time: it shows from the start of the first clip, fully for `config.editor.caption.holdSeconds`, then fades out over `fadeSeconds`. While playing the source, the playhead is mapped through the clips, so pausing freezes the fade, seeking back brings it back, and outside every clip (which isn't in the export) it hides. Before any clip is marked it shows in full.
+
+**Exporting.** Export video sends the download's id, the clips in order and the caption with `config.editor.caption`'s hold and fade to `POST /api/v1/exports` (`exportsFacade.useStartExport`). fetchr renders the same caption into the video, so the result looks like the preview. The export then shows on the Editing page as Rendering. `useExportEvents`, mounted in the layout next to the download events, refetches when it finishes and toasts the result. The clips stay in the editor, so they can be changed and exported again.
 
 An uploaded file plays from an object URL in the browser, nothing is uploaded, and the URL is freed when the editor closes.
 
