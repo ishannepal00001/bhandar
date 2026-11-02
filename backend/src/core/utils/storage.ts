@@ -3,6 +3,9 @@
 // Storage.upload(): Streams need `size`, since B2 rejects uploads without a Content-Length.
 // Storage.getFile(): Returns the file's metadata and a short-lived download link. Pass `filename` to make the
 //   browser save it.
+// Storage.signUploadUrl(): A presigned PUT for the browser to send a file straight to B2, valid ttlSeconds. The
+//   Content-Type is signed, so the browser has to send exactly that header. The bucket's CORS rules must allow PUT
+//   from the frontend's origin.
 // Storage.signUrl(): Only signs, with no request to B2, so it's cheap enough for every item in a list. It doesn't check
 //   the file exists.
 // encodeFilename(): RFC 5987 percent-encoding for filename*. encodeURIComponent leaves ! ' ( ) * as they are, which
@@ -92,6 +95,17 @@ export class Storage {
       filename ? `attachment; filename*=UTF-8''${encodeFilename(filename)}` : 'inline',
     )
     const presigned = await this.client.sign(signed.toString(), { method: 'GET', aws: { signQuery: true } })
+    return presigned.url
+  }
+
+  async signUploadUrl(id: string, contentType: string, ttlSeconds: number): Promise<string> {
+    const signed = new URL(`${this.base}/${encodeKey(id)}`)
+    signed.searchParams.set('X-Amz-Expires', String(ttlSeconds))
+    const presigned = await this.client.sign(signed.toString(), {
+      method: 'PUT',
+      headers: { 'Content-Type': contentType },
+      aws: { signQuery: true },
+    })
     return presigned.url
   }
 

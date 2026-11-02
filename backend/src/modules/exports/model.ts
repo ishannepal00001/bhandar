@@ -20,14 +20,15 @@ function fromRow(row: ExportRow): Export {
 export function insertExport(item: Export): Promise<void> {
   return query('Failed to save export', async () => {
     await env.BHANDAR_DB.prepare(
-      'INSERT INTO exports (id, user_id, download_id, title, clips, caption, status, filename, content_type, filesize, ' +
-        'thumbnail, error, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) ' +
+      'INSERT INTO exports (id, user_id, download_id, upload_id, title, clips, caption, status, filename, content_type, ' +
+        'filesize, thumbnail, error, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) ' +
         'ON CONFLICT(id) DO NOTHING',
     )
       .bind(
         item.id,
         item.user_id,
         item.download_id,
+        item.upload_id,
         item.title,
         JSON.stringify(item.clips),
         item.caption === null ? null : JSON.stringify(item.caption),
@@ -59,6 +60,15 @@ export function findExport(userId: number, id: string): Promise<Export | undefin
       .bind(userId, id)
       .first<ExportRow>()
     return row ? fromRow(row) : undefined
+  })
+}
+
+export function countExportsOfUpload(uploadId: string): Promise<number> {
+  return query('Failed to look up export', async () => {
+    const row = await env.BHANDAR_DB.prepare('SELECT COUNT(*) AS count FROM exports WHERE upload_id = ?')
+      .bind(uploadId)
+      .first<{ count: number }>()
+    return row?.count ?? 0
   })
 }
 

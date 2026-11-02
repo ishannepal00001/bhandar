@@ -55,6 +55,12 @@
     "EXPORT_MAX_SECONDS": 600,
     // Added after the source video's title in the name an export is saved under, before DOWNLOAD_FILE_EXTENSION.
     "EXPORT_FILE_SUFFIX": " (clip)",
+    // Uploaded videos to export clips from. The browser sends the file straight to B2 with a signed link that lasts
+    // UPLOAD_URL_TTL_SECONDS; the Worker never sees the bytes. An upload is deleted with the last export made from it,
+    // and one that was never exported is deleted by the daily cleanup once it's UPLOAD_STALE_HOURS old.
+    "UPLOAD_MAX_BYTES": 2147483648,
+    "UPLOAD_URL_TTL_SECONDS": 3600,
+    "UPLOAD_STALE_HOURS": 24,
     // How many finished downloads GET /api/v1/dashboard returns.
     "DASHBOARD_RECENT_LIMIT": 6,
     "DOWNLOAD_ALLOWED_HOSTS": ["facebook.com", "www.facebook.com", "m.facebook.com", "web.facebook.com", "fb.watch"],
@@ -82,6 +88,9 @@
     "bindings": [{ "name": "DOWNLOAD_TRACKER", "class_name": "DownloadTracker" }]
   },
   "migrations": [{ "tag": "v1", "new_sqlite_classes": ["DownloadTracker"] }],
+
+  // Runs scheduled() daily: deletes uploads that were never exported (UPLOAD_STALE_HOURS).
+  "triggers": { "crons": ["0 3 * * *"] },
 
   // IP-keyed limits. period must be 10 or 60 seconds; counts are per Cloudflare location and approximate.
   "ratelimits": [

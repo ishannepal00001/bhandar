@@ -5,6 +5,7 @@
 // endClip(): Adds the clip only if it's at least config.editor.minClipSeconds long and returns whether it did; the
 //   pending start stays set when it's refused, so the end can be marked again.
 // moveClip(): by is -1 (earlier) or 1 (later); moving past either end is ignored.
+// setUploadId(): Records that an upload source reached B2; ignored if the source has changed since.
 import { create } from 'zustand'
 import type { HeadlineFormValues } from '../components/Editor/HeadlineForm.types'
 import { config } from '../config'
@@ -16,6 +17,7 @@ type ClipState = {
   pendingStart: number | null
   caption: HeadlineFormValues | null
   setSource: (source: ClipSource | null) => void
+  setUploadId: (file: File, uploadId: string) => void
   setCaption: (caption: HeadlineFormValues | null) => void
   startClip: (time: number) => void
   endClip: (time: number) => boolean
@@ -30,6 +32,10 @@ const empty = { source: null, clips: [], pendingStart: null, caption: null }
 export const useClipStore = create<ClipState>()((set, get) => ({
   ...empty,
   setSource: (source) => set({ ...empty, source }),
+  setUploadId: (file, uploadId) => {
+    const { source } = get()
+    if (source?.kind === 'upload' && source.file === file) set({ source: { ...source, uploadId } })
+  },
   setCaption: (caption) => set({ caption }),
   startClip: (time) => set({ pendingStart: time }),
   endClip: (time) => {

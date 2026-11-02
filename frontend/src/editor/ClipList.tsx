@@ -1,16 +1,20 @@
 // ClipList: What the export will render: the caption, then the clips in output order with their source times and
 //   lengths, and the joined video's total length. Clips move up or down one place at a time and can be removed; the
 //   caption opens the stepper again to edit it.
-// blocker(): Why Export is unavailable, checked against the same limits the Worker enforces (config.editor) so the
-//   reason shows before anything is sent. Only a download can be exported: an upload exists only in this browser.
-// Export: Sends the source download's id, the clips in order and the caption with config.editor.caption's hold and
-//   fade, then calls onExported (the toolbar closes the popup). The clips stay, so they can be tweaked and exported
+// blocker(): Why Export is unavailable, checked against the same limits the Worker enforces (config.editor,
+//   config.uploads) so the reason shows before anything is sent.
+// Export: Sends the source, the clips in order and the caption with config.editor.caption's hold and fade, then calls
+//   onExported (the toolbar closes the popup). An uploaded video is sent to B2 first, with its progress on the button,
+//   and only once: its id is kept on the source, so exporting again in the same session goes straight to the render. The clips stay, so they can be tweaked and exported
 //   again; the export shows on the Editing page, rendering until its event arrives.
 import { ArrowDown, ArrowUp, Clapperboard, Pencil, Trash2 } from 'lucide-react'
+import { useState } from 'react'
 import { config } from '../config'
 import { clipsFacade } from '../facades/clips'
 import { exportsFacade } from '../facades/exports'
+import { uploadsFacade } from '../facades/uploads'
 import type { ClipSource } from '../types/clips'
+import type { ExportRequest } from '../types/exports'
 import { muted, panel } from '../styles'
 import { formatDuration } from './format'
 import { totalSeconds } from './timeline'
@@ -23,7 +27,10 @@ const label = `text-xs uppercase tracking-widest ${muted}`
 
 function blocker(source: ClipSource | null, clipCount: number, seconds: number, marking: boolean): string | null {
   const { maxClips, maxSeconds } = config.editor
-  if (source?.kind !== 'download') return 'Only downloaded videos can be exported for now.'
+  if (!source) return 'Open a video to export.'
+  if (source.kind === 'upload' && source.file.size > config.uploads.maxBytes) {
+    return `Videos over ${Math.floor(config.uploads.maxBytes / 1024 ** 2)} MB can't be uploaded to export.`
+  }
   if (clipCount === 0) return 'Mark at least one clip to export.'
   if (marking) return 'Finish or cancel the clip you’re marking first.'
   if (clipCount > maxClips) return `Use at most ${maxClips} clips.`
@@ -37,18 +44,36 @@ function ClipList({ onEditCaption, onExported }: { onEditCaption: () => void; on
   const source = clipsFacade.useClipStore((state) => state.source)
   const marking = clipsFacade.useClipStore((state) => state.pendingStart !== null)
   const startExport = exportsFacade.useStartExport()
+  const uploadVideo = uploadsFacade.useUploadVideo()
+  const [progress, setProgress] = useState(0)
   const reason = blocker(source, clips.length, totalSeconds(clips), marking)
+  const busy = uploadVideo.isPending || startExport.isPending
 
-  const exportClips = () => {
-    if (reason || source?.kind !== 'download') return
+  const render = (sourceId: Pick<ExportRequest, 'download_id' | 'upload_id'>) => {
     const { holdSeconds, fadeSeconds } = config.editor.caption
     startExport.mutate(
       {
-        download_id: source.downloadId,
+        ...sourceId,
         clips: clips.map(({ start, end }) => ({ start, end })),
         caption: caption && { ...caption, hold: holdSeconds, fade: fadeSeconds },
       },
       { onSuccess: onExported },
+    )
+  }
+
+  const exportClips = () => {
+    if (reason || !source) return
+    if (source.kind === 'download') return render({ download_id: source.downloadId })
+    if (source.uploadId) return render({ upload_id: source.uploadId })
+    setProgress(0)
+    uploadVideo.mutate(
+      { file: source.file, onProgress: setProgress },
+      {
+        onSuccess: (uploadId) => {
+          clipsFacade.setUploadId(source.file, uploadId)
+          render({ upload_id: uploadId })
+        },
+      },
     )
   }
 
@@ -138,14 +163,21 @@ function ClipList({ onEditCaption, onExported }: { onEditCaption: () => void; on
         <button
           type="button"
           onClick={exportClips}
-          disabled={reason !== null || startExport.isPending}
+          disabled={reason !== null || busy}
           className="flex w-full items-center justify-center gap-2 bg-primary px-6 py-2.5 text-sm text-background hover:bg-primary/90 disabled:opacity-40 dark:bg-night-primary dark:text-night-background dark:hover:bg-night-primary/90"
         >
           <Clapperboard size={16} />
-          {startExport.isPending ? 'Exporting…' : 'Export video'}
+          {uploadVideo.isPending
+            ? `Uploading ${Math.round(progress * 100)}%…`
+            : startExport.isPending
+              ? 'Exporting…'
+              : 'Export video'}
         </button>
         <p className={`mt-2 text-center text-xs ${muted}`}>
-          {reason ?? 'The clips are joined in this order into one video, with the caption at the start.'}
+          {reason ??
+            (source?.kind === 'upload' && !source.uploadId
+              ? 'The video is uploaded first, then the clips are joined in this order with the caption at the start.'
+              : 'The clips are joined in this order into one video, with the caption at the start.')}
         </p>
       </section>
     </div>

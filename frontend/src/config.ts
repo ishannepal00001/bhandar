@@ -8,6 +8,7 @@
 // editor.minClipSeconds, maxClips, maxSeconds: The export's limits: the clip length, the number of clips, and their
 //   total. They mirror the Worker's EXPORT_MIN_CLIP_SECONDS, EXPORT_MAX_CLIPS and EXPORT_MAX_SECONDS, which refuse
 //   anything outside them, so the editor can say why before sending.
+// uploads.maxBytes: The largest video that can be uploaded to export from; mirrors the Worker's UPLOAD_MAX_BYTES.
 export const config = {
   api: {
     baseUrl: '',
@@ -21,6 +22,9 @@ export const config = {
   },
   dashboard: {
     marqueeAbove: 3,
+  },
+  uploads: {
+    maxBytes: 2 * 1024 ** 3,
   },
   editor: {
     caption: {

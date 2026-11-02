@@ -42,9 +42,10 @@ This README covers the whole project: how the backend and frontend are built, ho
 | Backend: downloads | Done on the Worker side. Queues jobs on fetchr, polls them from a Durable Object, stores finished ones in D1, pushes them over SSE, serves B2 links, deletes |
 | Backend: dashboard | Done. `GET /api/v1/dashboard` returns the stats, the queued jobs and the latest finished ones |
 | Backend: exports | Done on the Worker side. Queues clip renders on fetchr from the same Durable Object, stores finished ones in D1, pushes them over SSE, serves B2 links, deletes |
+| Backend: uploads | Done. Signs a PUT so the browser sends a local video straight to B2, confirms it arrived, deletes it with its last export, and a daily cron removes ones never exported. The bucket needs a CORS rule for the frontend's origin (see [backend/API.md](backend/API.md#uploads)) |
 | fetchr (Python `yt-dlp` + `ffmpeg` service on Render) | Built in its own repo: downloads, thumbnails, and renders (clips joined into one MP4 with the caption burned in). Its contract is in [backend/API.md](backend/API.md#upstream-fetchr) |
 | Frontend: UI | Done. Login page, dashboard, downloads page, queue, download modal, collapsible sidebar, light and dark themes |
-| Frontend: editing | Done for downloads. The Editing page opens a download or an uploaded file in the editor, where you mark clips, order them, and add a news-style caption that previews the export's timing. **Export video** renders them into one MP4 through fetchr; the page lists exports as they render and finish, to save or delete. Uploaded files can be clipped but not exported yet (they'd need uploading to B2 first) |
+| Frontend: editing | Done. The Editing page opens a download or an uploaded file in the editor, where you mark clips, order them, and add a news-style caption that previews the export's timing. **Export video** renders them into one MP4 through fetchr; the page lists exports as they render and finish, to save or delete. An uploaded file is sent to B2 on its first export, with progress on the button |
 | Frontend: API calls | Wired up. Login, the dashboard, the downloads list, the download form, and save and delete all call the backend; the lists refresh live over SSE. The queue's cancel button and Create clip still do nothing (there is no cancel endpoint) |
 
 ## Architecture
@@ -63,6 +64,8 @@ This README covers the whole project: how the backend and frontend are built, ho
    │                              ├──► fetchr on Render (yt-dlp + ffmpeg) ──► uploads to B2
    │                              └──► D1 (downloads, exports) when a job finishes
    ├── /api/v1/{downloads,exports}/:id/file ──► presigned B2 link
+   ├── /api/v1/uploads/*    ──► presigned PUT; the browser uploads straight to B2
+   ├── scheduled() daily    ──► deletes uploads that were never exported
    ├── /api/v1/dashboard    ──► stats, queued jobs (Durable Object) and recent ones (D1)
    └── /health              ──► D1 round trip
 ```
@@ -95,17 +98,20 @@ bhandar/
 │   │   ├── 0002_seed_user.sql.example   login user seed (copy to .sql, gitignored)
 │   │   ├── 0003_downloads.sql   finished downloads table
 │   │   ├── 0004_download_thumbnail.sql   thumbnail column
-│   │   └── 0005_exports.sql     finished exports table
+│   │   ├── 0005_exports.sql     finished exports table
+│   │   └── 0006_uploads.sql     uploads table; exports take a download or an upload
 │   └── src/
 │       ├── index.ts             Hono app: logger, API rate limit, routers, /health, error mapping, exports DownloadTracker
 │       ├── api/v1/
 │       │   ├── auth.ts          /auth routes
 │       │   ├── download.ts      /downloads routes (behind isUser)
-│       │   └── exports.ts       /exports routes (behind isUser)
+│       │   ├── exports.ts       /exports routes (behind isUser)
+│       │   └── uploads.ts       /uploads routes (behind isUser)
 │       ├── modules/
 │       │   ├── auth/            controller, service, model, utils (+ .types.ts / .error.ts siblings)
 │       │   ├── downloads/       controller, service, model, utils, tracker (DownloadTracker Durable Object)
-│       │   └── exports/         controller, service, model, utils (fetchr renders; tracked by DownloadTracker)
+│       │   ├── exports/         controller, service, model, utils (fetchr renders; tracked by DownloadTracker)
+│       │   └── uploads/         controller, service, model (signed uploads, stale-upload cleanup)
 │       └── core/
 │           ├── types.ts         re-exports every *.types.ts in core/
 │           ├── middlewares/
@@ -190,6 +196,8 @@ All configuration, secrets included, is in `backend/wrangler.jsonc`. That file i
 | `vars` | `DOWNLOAD_FILE_EXTENSION` | Added to a finished video's title when it's saved (`.mp4`) |
 | `vars` | `EXPORT_MAX_QUEUED`, `EXPORT_MAX_CLIPS`, `EXPORT_MIN_CLIP_SECONDS`, `EXPORT_MAX_SECONDS` | Most exports queued at once (polled on the same alarm, so keep `DOWNLOAD_MAX_QUEUED + EXPORT_MAX_QUEUED` under 50), and the clip limits a request may use. Don't make the clip limits looser than fetchr's (20 clips, 0.5s each, `FETCHR_RENDER_MAX_SECONDS` in total) |
 | `vars` | `EXPORT_FILE_SUFFIX` | Added after the source's title when an export is saved (` (clip)`) |
+| `vars` | `UPLOAD_MAX_BYTES`, `UPLOAD_URL_TTL_SECONDS`, `UPLOAD_STALE_HOURS` | Largest video that can be uploaded (2 GiB), how long its signed PUT lasts, and how old an upload that was never exported gets before the daily cleanup deletes it |
+| `triggers` | `crons: ["0 3 * * *"]` | Runs `scheduled()` daily for the upload cleanup |
 | `vars` | `DOWNLOAD_ALLOWED_HOSTS` | Hosts a download link may use (Facebook and `fb.watch`) |
 | `vars` (secrets) | `JWT_SECRET`, `SMTP_PASS`, `B2_KEY_ID`, `B2_APP_KEY`, `DOWNLOADER_SEED_CODE` | The JWT signing key, the SMTP password, the B2 application key, and fetchr's first rolling code. They're plain vars, so when deployed they show in the Cloudflare dashboard like any other var |
 | `d1_databases` | `BHANDAR_DB` → `bhandardb` | The database |
@@ -231,14 +239,15 @@ Each layer has its own error class, and each layer converts the error from the l
 
 ### Database
 
-D1 (SQLite) holds four tables, created by the migrations:
+D1 (SQLite) holds five tables, created by the migrations:
 
 | Table | Migration | Holds |
 |---|---|---|
 | `users` | `0001_init.sql` | `name`, `email`, `password` (SHA-256 of `<salt>:<password>`), `password_salt` |
 | `otp` | `0001_init.sql` | `user_id`, `code_hash` (SHA-256 of the code), `expires_at`. Indexed on `code_hash` |
 | `downloads` | `0003_downloads.sql` | Finished jobs only: `id` (fetchr's job id), `user_id`, `source_url`, `status` (`completed`/`failed`/`cancelled`), `title`, `filename` (the B2 key), `content_type`, `filesize`, `error`, `created_at`, `updated_at`. Indexed on `(user_id, created_at DESC)` |
-| `exports` | `0005_exports.sql` | Finished exports only: `id` (fetchr's render id), `user_id`, `download_id` (the source, not a foreign key so deleting the download keeps its exports), `title`, `clips` and `caption` (JSON), `status`, `filename` (the B2 key under `renders/`), `content_type`, `filesize`, `thumbnail`, `error`, `created_at`, `updated_at`. Indexed on `(user_id, created_at DESC)` |
+| `exports` | `0005_exports.sql`, `0006_uploads.sql` | Finished exports only: `id` (fetchr's render id), `user_id`, `download_id` or `upload_id` (the source, exactly one; not foreign keys so deleting a download keeps its exports), `title`, `clips` and `caption` (JSON), `status`, `filename` (the B2 key under `renders/`), `content_type`, `filesize`, `thumbnail`, `error`, `created_at`, `updated_at`. Indexed on `(user_id, created_at DESC)` |
+| `uploads` | `0006_uploads.sql` | Videos uploaded to export from: `id`, `user_id`, `name` (on the device), `filename` (the B2 key `uploads/<client_id>/<id>/source<.ext>`), `content_type`, `size`, `status` (`pending` until B2 has it, then `ready`), `created_at` |
 
 Queued jobs aren't in D1. They live in the DownloadTracker's own SQLite storage until they finish: downloads in a `jobs` table (`id`, `user_id`, `source_url`, `created_at`, `failures`) and exports in an `exports` table (`id`, `user_id`, `spec` as JSON, `created_at`, `failures`).
 
@@ -271,6 +280,16 @@ An export is a fetchr render: clips cut from one of the user's completed downloa
 3. **Queue cap and polling.** At most `EXPORT_MAX_QUEUED` (3) exports are queued at once. The same alarm polls them alongside the downloads.
 4. **Finishing, live updates, listing, files and deleting** work like downloads: finished exports go to the D1 `exports` table, `GET /api/v1/exports/events` streams them (a separate stream from the downloads one), the file link saves as the source's title plus `EXPORT_FILE_SUFFIX`, and deleting removes the B2 files and then the row.
 
+### How uploads work
+
+An uploaded video becomes an export's source the first time it's exported.
+
+1. **Ticket.** The editor calls `POST /api/v1/uploads` with the file's name, type and size. The Worker stores a `pending` row and signs a PUT to `uploads/<client_id>/<id>/source<.ext>`, a key fetchr accepts as a render source.
+2. **Upload.** The browser PUTs the file straight to B2 (XHR, for progress). The Worker never handles the bytes, so there's no Workers body limit. The bucket's CORS rules must allow it.
+3. **Complete.** `POST /api/v1/uploads/:id/complete` checks B2 has the object at the announced size and marks it `ready`.
+4. **Export.** `POST /api/v1/exports` with `upload_id` instead of `download_id`. Later exports in the same editor session reuse the upload.
+5. **Cleanup.** Deleting an upload's last export (with none queued) deletes the upload. The daily cron (`scheduled()`) deletes uploads that were never exported once they're `UPLOAD_STALE_HOURS` old.
+
 ### fetchr, the download service
 
 fetchr is the Python service on Render that runs `yt-dlp` and `ffmpeg`, downloads the video and uploads it to B2 under `downloads/<client_id>/<id>/<filename>`. The Worker talks to it only from the DownloadTracker, through the `Fetchr` client in `core/middlewares/fetchr.ts`.
@@ -289,7 +308,7 @@ The Worker uses two endpoints: `POST /api/v1/downloads` to queue a link and `GET
 
 ### API summary
 
-All routes are under `/api/v1`, and every `/downloads`, `/exports` and `/dashboard` route needs the auth cookie. Errors come back as `{ "error": "...", "issues"?: { field: [messages] } }`.
+All routes are under `/api/v1`, and every `/downloads`, `/exports`, `/uploads` and `/dashboard` route needs the auth cookie. Errors come back as `{ "error": "...", "issues"?: { field: [messages] } }`.
 
 | Method | Path | Body | Response |
 |---|---|---|---|
@@ -301,11 +320,13 @@ All routes are under `/api/v1`, and every `/downloads`, `/exports` and `/dashboa
 | GET | `/downloads/events` | none | SSE stream: `completed`, `failed` or `cancelled` events with the job as data |
 | GET | `/downloads/:id/file` | none | `{ "url": string }`, a presigned B2 link (completed jobs only) |
 | DELETE | `/downloads/:id` | none | `{ "deleted": true }` |
-| POST | `/exports` | `{ download_id, clips: [{ start, end }], caption?: { headline, details, hold, fade } }` | `202` queued export |
+| POST | `/exports` | `{ download_id or upload_id, clips: [{ start, end }], caption?: { headline, details, hold, fade } }` | `202` queued export |
 | GET | `/exports` | none | queued exports, then finished ones, newest first |
 | GET | `/exports/events` | none | SSE stream like `/downloads/events`, for exports |
 | GET | `/exports/:id/file` | none | `{ "url": string }`, a presigned B2 link (completed exports only) |
 | DELETE | `/exports/:id` | none | `{ "deleted": true }` |
+| POST | `/uploads` | `{ name, content_type, size }` | `201` `{ id, url, headers }`: PUT the file to `url` |
+| POST | `/uploads/:id/complete` | none | `{ id, status: "ready" }` once B2 has the file |
 
 `GET /health` (outside `/api`) returns `{ "status": "ok", "db": "ok" }`, or `503` with `"db": "unreachable"`.
 
@@ -389,7 +410,7 @@ Everything for editing lives in `src/editor/`, and pages import it from `src/edi
 | `Editor.tsx` | Covers the whole viewport over the app on a black background and renders the Video.js player (`VideoPlayer`, `VideoSkin`, `Video` from `@videojs/react/video`). The player is framed to the video's own aspect ratio, so the controls, toolbar and caption sit on the picture. The player's own fullscreen button still works |
 | `ClipToolbar.tsx` | Floats over the top left of the video: Close, the clip button, Clips, and the readout, in one group that stops short of the top-right corner, where the skin puts its cast, picture-in-picture and fullscreen buttons on narrow (portrait) videos. It's a child of the skin, so it sits inside the player's container: it stays on screen in native fullscreen and fades in and out with the player's controls (`controlsVisible`). Its popups (the caption stepper and the clip list) are portalled to the body |
 | `ClipCaption.tsx` | The news-style caption over the video: the headline in Montserrat ExtraBold with a gold bar per line, bold cream details below, on a full-width dark panel. It previews the export's timing (below) |
-| `ClipList.tsx` | The Clips and export popup: the caption (with Add or Edit), the clips in output order with their times and lengths, which move up or down or can be removed, the total length, and **Export video**. Export says why it's unavailable (an uploaded video, no clips, a clip still being marked, or over `config.editor.maxClips` / `maxSeconds`) before anything is sent |
+| `ClipList.tsx` | The Clips and export popup: the caption (with Add or Edit), the clips in output order with their times and lengths, which move up or down or can be removed, the total length, and **Export video**. Export says why it's unavailable (no clips, a clip still being marked, over `config.editor.maxClips` / `maxSeconds`, or an upload over `config.uploads.maxBytes`) before anything is sent. An uploaded video is sent to B2 first (`uploadsFacade.useUploadVideo`), with its progress on the button |
 | `timeline.ts` | Maps the playback position onto the exported video's time, totals the clips, and works out the caption's opacity |
 | `format.ts` | Formats times as `m:ss.s` or `h:mm:ss.s` |
 | `index.ts` | Exports `Editor` |
@@ -410,7 +431,7 @@ The caption runs on the exported video's time: it shows from the start of the fi
 
 **Exporting.** Export video sends the download's id, the clips in order and the caption with `config.editor.caption`'s hold and fade to `POST /api/v1/exports` (`exportsFacade.useStartExport`). fetchr renders the same caption into the video, so the result looks like the preview. The export then shows on the Editing page as Rendering. `useExportEvents`, mounted in the layout next to the download events, refetches when it finishes and toasts the result. The clips stay in the editor, so they can be changed and exported again.
 
-An uploaded file plays from an object URL in the browser, nothing is uploaded, and the URL is freed when the editor closes.
+An uploaded file plays from an object URL in the browser, and the URL is freed when the editor closes. It's sent to B2 only when it's first exported.
 
 **Theming the player.** The packaged skin's public settings set the accent to the app's gold, square corners, no border and the app font. Its internal variables, which aren't a documented API, give the control bar, menus and popups the app background and text colours, square corners, and no blur, gradient or shadow. Because of those internal variables, `@videojs/react` is pinned to exactly `10.2.0`; check the player after any upgrade. Two pieces may still render rounded: the seek slider's track outline and its drag handle.
 

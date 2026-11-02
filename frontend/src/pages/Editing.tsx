@@ -35,7 +35,7 @@ function Editing() {
         onChange={(e) => {
           const file = e.target.files?.[0]
           if (file) {
-            clipsFacade.setSource({ kind: 'upload', name: file.name })
+            clipsFacade.setSource({ kind: 'upload', name: file.name, file, uploadId: null })
             setVideo({ src: URL.createObjectURL(file), upload: true })
           }
           e.target.value = ''

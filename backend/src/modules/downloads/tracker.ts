@@ -11,6 +11,8 @@
 //   Refuses once DOWNLOAD_MAX_QUEUED downloads are queued or starting.
 // DownloadTracker.startExport(): The same for a render of clips from a download already in B2 (sourceKey), refused
 //   once EXPORT_MAX_QUEUED exports are queued or starting.
+// DownloadTracker.queuedUploadIds(): The uploads that queued exports render from, so the stale-upload cleanup leaves
+//   them alone.
 // DownloadTracker.fetch(): SSE stream for one user; the route passes the user id in the x-user-id header and which
 //   stream in x-stream (downloads unless it's "exports").
 // DownloadTracker.alarm(): Polls at most DOWNLOAD_MAX_QUEUED downloads and EXPORT_MAX_QUEUED exports, oldest first.
@@ -143,6 +145,14 @@ export class DownloadTracker extends DurableObject<Env> {
       .exec<TrackedExport>('SELECT * FROM exports WHERE user_id = ? ORDER BY created_at DESC', userId)
       .toArray()
       .map(toQueuedExport)
+  }
+
+  queuedUploadIds(): string[] {
+    return this.ctx.storage.sql
+      .exec<TrackedExport>('SELECT * FROM exports')
+      .toArray()
+      .map((job) => toQueuedExport(job).upload_id)
+      .filter((id): id is string => id !== null)
   }
 
   async fetch(request: Request): Promise<Response> {
