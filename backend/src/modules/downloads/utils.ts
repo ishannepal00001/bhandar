@@ -4,14 +4,14 @@
 // fetchrDownloadSchema.thumbnail: Defaults to null so a fetchr without thumbnails still passes.
 // toJob(): Running statuses collapse to queued; a completed file's and thumbnail's names become their B2 keys, which
 //   fetchr writes as downloads/<client_id>/<id>/<name>.
-// withThumbnailUrls(): Signs each thumbnail. If storage isn't configured the jobs come back without links rather than
-//   failing the whole list.
+// withThumbnailUrls(): Signs each thumbnail, for downloads and exports alike. If storage isn't configured the jobs come
+//   back without links rather than failing the whole list.
 import { env } from 'cloudflare:workers'
 import { z } from 'zod'
 import type { Fetchr } from '../../core/middlewares/fetchr'
 import { Storage } from '../../core/utils/storage'
 import { StorageError } from '../../core/utils/storage.error'
-import type { FetchrDownload, FinalStatus, FinishedJob, Job, ShownJob } from './utils.types'
+import type { FetchrDownload, FinalStatus, Job } from './utils.types'
 
 export const runningStatuses = ['queued', 'downloading', 'uploading', 'verifying'] as const
 export const finalStatuses = ['completed', 'failed', 'cancelled'] as const
@@ -51,7 +51,9 @@ export function toJob(download: FetchrDownload): Job {
   }
 }
 
-export async function withThumbnailUrls(jobs: FinishedJob[]): Promise<ShownJob[]> {
+export async function withThumbnailUrls<T extends { thumbnail: string | null }>(
+  jobs: T[],
+): Promise<(T & { thumbnail_url: string | null })[]> {
   let storage: Storage
   try {
     storage = new Storage(env)

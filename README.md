@@ -41,9 +41,10 @@ This README covers the whole project: how the backend and frontend are built, ho
 | Backend: auth | Done. Password + emailed OTP login, JWT cookie, logout, per-IP rate limits |
 | Backend: downloads | Done on the Worker side. Queues jobs on fetchr, polls them from a Durable Object, stores finished ones in D1, pushes them over SSE, serves B2 links, deletes |
 | Backend: dashboard | Done. `GET /api/v1/dashboard` returns the stats, the queued jobs and the latest finished ones |
-| fetchr (Python `yt-dlp` service on Render) | **Not built yet.** Its contract is defined in [backend/API.md](backend/API.md#upstream-fetchr). Until it exists, no video actually downloads |
+| Backend: exports | Done on the Worker side. Queues clip renders on fetchr from the same Durable Object, stores finished ones in D1, pushes them over SSE, serves B2 links, deletes |
+| fetchr (Python `yt-dlp` + `ffmpeg` service on Render) | Built in its own repo: downloads, thumbnails, and renders (clips joined into one MP4 with the caption burned in). Its contract is in [backend/API.md](backend/API.md#upstream-fetchr) |
 | Frontend: UI | Done. Login page, dashboard, downloads page, queue, download modal, collapsible sidebar, light and dark themes |
-| Frontend: editing | Clips and caption done in the browser. The Editing page opens a download or an uploaded file in the editor, where you mark clips, order them, and add a news-style caption that previews the export's timing. Exporting them as one video isn't built yet (it needs fetchr's render endpoint) |
+| Frontend: editing | Clips and caption done in the browser. The Editing page opens a download or an uploaded file in the editor, where you mark clips, order them, and add a news-style caption that previews the export's timing. The backend can export them as one video; the editor's Export button isn't built yet |
 | Frontend: API calls | Wired up. Login, the dashboard, the downloads list, the download form, and save and delete all call the backend; the lists refresh live over SSE. The queue's cancel button and Create clip still do nothing (there is no cancel endpoint) |
 
 ## Architecture
@@ -57,11 +58,11 @@ This README covers the whole project: how the backend and frontend are built, ho
  Cloudflare Worker (Hono)
    ├── /api/v1/auth/*       ──► D1 (users, otp) ──► SMTP (login codes)
    ├── /api/v1/downloads/*  ──► DownloadTracker Durable Object
-   │                              │  keeps queued jobs, polls on an alarm,
-   │                              │  streams finished jobs over SSE
+   ├── /api/v1/exports/*    ──►   │  keeps queued downloads and exports, polls on an alarm,
+   │                              │  streams finished ones over SSE (one stream each)
    │                              ├──► fetchr on Render (yt-dlp + ffmpeg) ──► uploads to B2
-   │                              └──► D1 (downloads) when a job finishes
-   ├── /api/v1/downloads/:id/file ──► presigned B2 link
+   │                              └──► D1 (downloads, exports) when a job finishes
+   ├── /api/v1/{downloads,exports}/:id/file ──► presigned B2 link
    ├── /api/v1/dashboard    ──► stats, queued jobs (Durable Object) and recent ones (D1)
    └── /health              ──► D1 round trip
 ```
@@ -92,15 +93,19 @@ bhandar/
 │   ├── migrations/
 │   │   ├── 0001_init.sql        users and otp tables
 │   │   ├── 0002_seed_user.sql.example   login user seed (copy to .sql, gitignored)
-│   │   └── 0003_downloads.sql   finished downloads table
+│   │   ├── 0003_downloads.sql   finished downloads table
+│   │   ├── 0004_download_thumbnail.sql   thumbnail column
+│   │   └── 0005_exports.sql     finished exports table
 │   └── src/
 │       ├── index.ts             Hono app: logger, API rate limit, routers, /health, error mapping, exports DownloadTracker
 │       ├── api/v1/
 │       │   ├── auth.ts          /auth routes
-│       │   └── download.ts      /downloads routes (behind isUser)
+│       │   ├── download.ts      /downloads routes (behind isUser)
+│       │   └── exports.ts       /exports routes (behind isUser)
 │       ├── modules/
 │       │   ├── auth/            controller, service, model, utils (+ .types.ts / .error.ts siblings)
-│       │   └── downloads/       controller, service, model, utils, tracker (DownloadTracker Durable Object)
+│       │   ├── downloads/       controller, service, model, utils, tracker (DownloadTracker Durable Object)
+│       │   └── exports/         controller, service, model, utils (fetchr renders; tracked by DownloadTracker)
 │       └── core/
 │           ├── types.ts         re-exports every *.types.ts in core/
 │           ├── middlewares/
@@ -183,10 +188,12 @@ All configuration, secrets included, is in `backend/wrangler.jsonc`. That file i
 | `vars` | `DOWNLOAD_POLL_SECONDS`, `DOWNLOAD_MAX_POLL_FAILURES`, `DOWNLOAD_TRACKER_NAME`, `SSE_HEARTBEAT_SECONDS` | How often the tracker polls fetchr, how many failed polls in a row mark a job failed, the tracker instance's name, and the SSE keep-alive interval |
 | `vars` | `DOWNLOAD_MAX_QUEUED` | Most downloads queued at once (`POST /downloads` returns `429` past it) and most jobs polled per alarm. Keep it under 50, the subrequests one Workers Free invocation may make |
 | `vars` | `DOWNLOAD_FILE_EXTENSION` | Added to a finished video's title when it's saved (`.mp4`) |
+| `vars` | `EXPORT_MAX_QUEUED`, `EXPORT_MAX_CLIPS`, `EXPORT_MIN_CLIP_SECONDS`, `EXPORT_MAX_SECONDS` | Most exports queued at once (polled on the same alarm, so keep `DOWNLOAD_MAX_QUEUED + EXPORT_MAX_QUEUED` under 50), and the clip limits a request may use. Don't make the clip limits looser than fetchr's (20 clips, 0.5s each, `FETCHR_RENDER_MAX_SECONDS` in total) |
+| `vars` | `EXPORT_FILE_SUFFIX` | Added after the source's title when an export is saved (` (clip)`) |
 | `vars` | `DOWNLOAD_ALLOWED_HOSTS` | Hosts a download link may use (Facebook and `fb.watch`) |
 | `vars` (secrets) | `JWT_SECRET`, `SMTP_PASS`, `B2_KEY_ID`, `B2_APP_KEY`, `DOWNLOADER_SEED_CODE` | The JWT signing key, the SMTP password, the B2 application key, and fetchr's first rolling code. They're plain vars, so when deployed they show in the Cloudflare dashboard like any other var |
 | `d1_databases` | `BHANDAR_DB` → `bhandardb` | The database |
-| `durable_objects` | `DOWNLOAD_TRACKER` → `DownloadTracker` | The download poller (SQLite-backed, so it runs on the free plan) |
+| `durable_objects` | `DOWNLOAD_TRACKER` → `DownloadTracker` | The download and export poller (SQLite-backed, so it runs on the free plan) |
 | `ratelimits` | `SEND_OTP_LIMITER` 3/min, `LOGIN_LIMITER` 5/min, `API_LIMITER` 60/10s | Per-IP limits. Cloudflare counts them per location, so they're approximate |
 
 The login user comes from `migrations/0002_seed_user.sql`. It's gitignored because it holds your email and password hash. The committed `.sql.example` shows how to generate the hash with `openssl` and `sha256sum`.
@@ -224,15 +231,16 @@ Each layer has its own error class, and each layer converts the error from the l
 
 ### Database
 
-D1 (SQLite) holds three tables, created by the migrations:
+D1 (SQLite) holds four tables, created by the migrations:
 
 | Table | Migration | Holds |
 |---|---|---|
 | `users` | `0001_init.sql` | `name`, `email`, `password` (SHA-256 of `<salt>:<password>`), `password_salt` |
 | `otp` | `0001_init.sql` | `user_id`, `code_hash` (SHA-256 of the code), `expires_at`. Indexed on `code_hash` |
 | `downloads` | `0003_downloads.sql` | Finished jobs only: `id` (fetchr's job id), `user_id`, `source_url`, `status` (`completed`/`failed`/`cancelled`), `title`, `filename` (the B2 key), `content_type`, `filesize`, `error`, `created_at`, `updated_at`. Indexed on `(user_id, created_at DESC)` |
+| `exports` | `0005_exports.sql` | Finished exports only: `id` (fetchr's render id), `user_id`, `download_id` (the source, not a foreign key so deleting the download keeps its exports), `title`, `clips` and `caption` (JSON), `status`, `filename` (the B2 key under `renders/`), `content_type`, `filesize`, `thumbnail`, `error`, `created_at`, `updated_at`. Indexed on `(user_id, created_at DESC)` |
 
-Queued jobs aren't in D1. They live in the DownloadTracker's own SQLite storage (a `jobs` table with `id`, `user_id`, `source_url`, `created_at`, `failures`) until they finish.
+Queued jobs aren't in D1. They live in the DownloadTracker's own SQLite storage until they finish: downloads in a `jobs` table (`id`, `user_id`, `source_url`, `created_at`, `failures`) and exports in an `exports` table (`id`, `user_id`, `spec` as JSON, `created_at`, `failures`).
 
 ### How login works
 
@@ -254,6 +262,15 @@ Queued jobs aren't in D1. They live in the DownloadTracker's own SQLite storage 
 9. **Deleting.** `DELETE /api/v1/downloads/:id` removes the B2 object first and then the D1 row, so a delete that fails partway can just be retried. Queued jobs can't be deleted.
 10. With no queued jobs left, the tracker stops setting alarms, so it holds nothing between downloads.
 
+### How exports work
+
+An export is a fetchr render: clips cut from one of the user's completed downloads, joined in order into one MP4, with the editor's caption burned in. It runs the same way as a download.
+
+1. **`POST /api/v1/exports`** with `{ download_id, clips, caption }`. The controller checks the clips against `EXPORT_MAX_CLIPS`, `EXPORT_MIN_CLIP_SECONDS` and `EXPORT_MAX_SECONDS`. The service looks up the download, which must be the user's and completed, and passes its stored B2 key to the tracker. The key is never taken from the request.
+2. **Same tracker.** fetchr keeps one rolling code per client and rotates it on every request, so every call has to go through one client, one at a time. That's why exports are tracked by the existing DownloadTracker, in their own `exports` table, rather than by a Durable Object of their own.
+3. **Queue cap and polling.** At most `EXPORT_MAX_QUEUED` (3) exports are queued at once. The same alarm polls them alongside the downloads.
+4. **Finishing, live updates, listing, files and deleting** work like downloads: finished exports go to the D1 `exports` table, `GET /api/v1/exports/events` streams them (a separate stream from the downloads one), the file link saves as the source's title plus `EXPORT_FILE_SUFFIX`, and deleting removes the B2 files and then the row.
+
 ### fetchr, the download service
 
 fetchr is the Python service on Render that runs `yt-dlp` and `ffmpeg`, downloads the video and uploads it to B2 under `downloads/<client_id>/<id>/<filename>`. The Worker talks to it only from the DownloadTracker, through the `Fetchr` client in `core/middlewares/fetchr.ts`.
@@ -272,7 +289,7 @@ The Worker uses two endpoints: `POST /api/v1/downloads` to queue a link and `GET
 
 ### API summary
 
-All routes are under `/api/v1`, and every `/downloads` route needs the auth cookie. Errors come back as `{ "error": "...", "issues"?: { field: [messages] } }`.
+All routes are under `/api/v1`, and every `/downloads`, `/exports` and `/dashboard` route needs the auth cookie. Errors come back as `{ "error": "...", "issues"?: { field: [messages] } }`.
 
 | Method | Path | Body | Response |
 |---|---|---|---|
@@ -284,6 +301,11 @@ All routes are under `/api/v1`, and every `/downloads` route needs the auth cook
 | GET | `/downloads/events` | none | SSE stream: `completed`, `failed` or `cancelled` events with the job as data |
 | GET | `/downloads/:id/file` | none | `{ "url": string }`, a presigned B2 link (completed jobs only) |
 | DELETE | `/downloads/:id` | none | `{ "deleted": true }` |
+| POST | `/exports` | `{ download_id, clips: [{ start, end }], caption?: { headline, details, hold, fade } }` | `202` queued export |
+| GET | `/exports` | none | queued exports, then finished ones, newest first |
+| GET | `/exports/events` | none | SSE stream like `/downloads/events`, for exports |
+| GET | `/exports/:id/file` | none | `{ "url": string }`, a presigned B2 link (completed exports only) |
+| DELETE | `/exports/:id` | none | `{ "deleted": true }` |
 
 `GET /health` (outside `/api`) returns `{ "status": "ok", "db": "ok" }`, or `503` with `"db": "unreachable"`.
 
@@ -431,6 +453,7 @@ Dark mode follows the system setting (`darkMode: "media"`). Headings use the ser
 | `createSendOtpRequestSchema(minLength)` | `auth.ts` | `{ password }` against `passwordRegex(minLength)` |
 | `createLoginRequestSchema(otpLength)` | `auth.ts` | `{ code }`, trimmed, exactly `otpLength` digits |
 | `createDownloadRequestSchema(allowedHosts)` | `downloads.ts` | `{ url }`, http(s), host in `allowedHosts` |
+| `createExportRequestSchema({ maxClips, minClipSeconds, maxSeconds })` | `exports.ts` | `{ download_id, clips, caption? }`: clip count, length and total, and the caption's text and timing |
 
 The backend controllers call them with values from `env`. The frontend doesn't use them yet.
 

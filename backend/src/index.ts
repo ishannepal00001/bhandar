@@ -3,7 +3,8 @@
 //   before the rate limiter so preflights aren't counted and its 429s carry CORS headers. csrf() rejects form-style
 //   requests from any other origin, which CORS alone doesn't stop.
 // GET /health: Liveness plus a D1 round trip; outside /api so it isn't rate limited.
-// export DownloadTracker: Durable Object classes must be exported from the Worker's entry file.
+// export DownloadTracker: Durable Object classes must be exported from the Worker's entry file. It tracks downloads and
+//   exports alike.
 import { env } from 'cloudflare:workers'
 import { Hono } from 'hono'
 import { cors } from 'hono/cors'
@@ -16,6 +17,8 @@ import { dashboardRouter } from './api/v1/dashboard'
 import { DashboardRouteError } from './api/v1/dashboard.error'
 import { downloadsRouter } from './api/v1/download'
 import { DownloadsRouteError } from './api/v1/download.error'
+import { exportsRouter } from './api/v1/exports'
+import { ExportsRouteError } from './api/v1/exports.error'
 import { IsUserError } from './core/middlewares/isUser.error'
 import { rateLimit } from './core/middlewares/rateLimit'
 import { RateLimitError } from './core/middlewares/rateLimit.error'
@@ -29,6 +32,7 @@ app.use('/api/*', rateLimit((env) => env.API_LIMITER))
 
 app.route('/api/v1/auth', authRouter)
 app.route('/api/v1/downloads', downloadsRouter)
+app.route('/api/v1/exports', exportsRouter)
 app.route('/api/v1/dashboard', dashboardRouter)
 
 app.get('/health', async (c) => {
@@ -43,7 +47,7 @@ app.get('/health', async (c) => {
 
 app.notFound((c) => c.json({ error: 'Not found' }, 404))
 app.onError((err, c) => {
-  if (err instanceof AuthRouteError || err instanceof DownloadsRouteError) {
+  if (err instanceof AuthRouteError || err instanceof DownloadsRouteError || err instanceof ExportsRouteError) {
     return c.json({ error: err.message, issues: err.issues }, err.status)
   }
   if (err instanceof HTTPException) return err.getResponse()

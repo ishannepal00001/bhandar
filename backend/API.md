@@ -398,18 +398,110 @@ Errors:
 | 500 | `Failed to look up download` / `Failed to delete download` | D1 error |
 | 502 | `Storage is not configured` / `Storage is unreachable` / `Delete failed with <status>` | B2 error. An object that is already missing doesn't count as an error |
 
+## Exports
+
+Clip exports: clips cut from one of the user's completed downloads, joined in order into **one MP4** by fetchr, with the editor's caption burned in. Every route runs `isUser` first, with the same `401`/`500` errors as the downloads routes, and only sees the logged-in user's exports.
+
+The flow mirrors downloads. `POST /exports` returns a queued export right away. The same `DownloadTracker` polls fetchr on the same alarm. It has to be the same object, because fetchr's rolling code is shared by every request the Worker makes. When the render finishes, the tracker stores it in D1 (`exports`, `migrations/0005_exports.sql`) and pushes it to `GET /exports/events`. Then `GET /exports/:id/file` gives a link to the video.
+
+**Queue cap.** At most `EXPORT_MAX_QUEUED` (3) exports can be queued at once, counted like downloads. Past the cap, `POST /exports` returns `429`. Each alarm polls at most `DOWNLOAD_MAX_QUEUED` downloads plus `EXPORT_MAX_QUEUED` exports, so keep their sum under 50.
+
+Types (`backend/src/modules/exports/utils.types.ts`):
+
+```ts
+type ExportClip = { start: number; end: number }        // seconds into the source download
+type ExportCaption = { headline: string; details: string; hold: number; fade: number }
+
+type QueuedExport = {
+  id: string                    // fetchr's render id, also the id in the URLs below
+  download_id: string           // the source download
+  title: string | null          // the source download's title when the export was made
+  clips: ExportClip[]           // in output order
+  caption: ExportCaption | null
+  status: 'queued'              // every running fetchr status shows as queued
+  created_at: string
+}
+
+type FinishedExport = Omit<QueuedExport, 'status'> & {
+  status: 'completed' | 'failed' | 'cancelled'
+  filename: string | null       // B2 key renders/<client_id>/<id>/clip.mp4; set only when completed
+  content_type: string | null   // "video/mp4"
+  filesize: number | null       // bytes
+  thumbnail: string | null      // B2 key of the first-frame thumbnail; null if fetchr couldn't make one
+  error: string | null          // reason, when failed, e.g. "Clip ends after the video does"
+  updated_at: string
+}
+
+type ShownExport = FinishedExport & { thumbnail_url: string | null }  // signed like ShownJob's
+```
+
+### `POST /api/v1/exports`
+
+Queues a render of clips from one of the user's completed downloads.
+
+Body (`createExportRequestSchema` in `schemas/exports.ts`):
+
+```json
+{
+  "download_id": "3f6c2a1e-…",
+  "clips": [ { "start": 12.4, "end": 31.0 }, { "start": 2, "end": 5.5 } ],
+  "caption": { "headline": "Flood waters recede", "details": "Roads reopen Monday.", "hold": 6, "fade": 1.5 }
+}
+```
+
+| Field | Rules |
+|---|---|
+| `download_id` | required; a download of this user's that completed |
+| `clips` | 1 to `EXPORT_MAX_CLIPS` (20), in output order, may overlap. Each `start` ≥ 0 and `end` at least `EXPORT_MIN_CLIP_SECONDS` (0.5) after it. Together at most `EXPORT_MAX_SECONDS` (600) |
+| `caption` | optional, `null` for none. `headline` 1–200 chars and `details` 1–600 chars, both trimmed; `hold` 0–600 and `fade` 0–60 seconds. The editor sends its own hold and fade so the render matches its preview |
+
+The B2 key fetchr renders from is the download's stored `filename`, never anything from the request. A clip that ends past the video's end isn't caught here; the export finishes as `failed` with `Clip ends after the video does`.
+
+Response `202`: a `QueuedExport`.
+
+Errors:
+
+| Status | `error` | When |
+|---|---|---|
+| 400 | `Body must be valid JSON` / `Invalid request` + `issues` | e.g. `{ "clips": ["The clips can add up to at most 600s"] }` |
+| 404 | `Download not found` | No download with this id for this user |
+| 409 | `Download has no file to clip` | The download failed or was cancelled |
+| 429 | `3 exports are already queued, wait for one to finish` | Queue cap |
+| 500 | `Failed to look up download` | D1 error |
+| 502 | `Download service …` | fetchr unreachable, or it refused the render |
+
+### `GET /api/v1/exports`
+
+The user's queued exports (newest first) followed by the finished ones (newest first), as `QueuedExport | ShownExport`. Errors: `500 Failed to list exports` (D1).
+
+### `GET /api/v1/exports/events`
+
+The same SSE stream as `GET /downloads/events`, but for exports: `: connected`, `: ping` every `SSE_HEARTBEAT_SECONDS`, and one event per export when it finishes, named by its final status, with the `FinishedExport` as `data`. Downloads never appear on this stream, and exports never appear on the downloads one.
+
+### `GET /api/v1/exports/:id/file`
+
+A presigned B2 link to a completed export, valid `STORAGE_URL_TTL_SECONDS`. It saves as the source's title plus `EXPORT_FILE_SUFFIX` and `DOWNLOAD_FILE_EXTENSION`, e.g. `Some video (clip).mp4` (`clip (clip).mp4` without a title). Response `200`: `{ "url": string }`.
+
+Errors: `404 Export not found` (also for a queued export), `404 File not found` (gone from B2), `409 Export has no file` (failed or cancelled), `500 Failed to look up export`, `502` for B2 errors.
+
+### `DELETE /api/v1/exports/:id`
+
+Deletes a finished export: the B2 video and thumbnail first, then the D1 row, so a failed delete can be retried. The source download is untouched. Response `200`: `{ "deleted": true }`.
+
+Errors: `404 Export not found` (queued exports can't be deleted), `500 Failed to look up export` / `Failed to delete export`, `502` for B2 errors.
+
 ## Status codes and error messages
 
 | Status | Meaning |
 |---|---|
 | 200 | OK |
-| 202 | Download queued |
+| 202 | Download or export queued |
 | 400 | Body isn't JSON (`Body must be valid JSON`) or fails validation (`Invalid request` + `issues`) |
 | 401 | Wrong password or code, or not logged in or session expired |
 | 403 | CSRF check failed: a form-style request from an origin other than `FRONTEND_ORIGIN` (plain-text `Forbidden`) |
-| 404 | Route, download or B2 file not found |
-| 409 | The download has no file (failed or cancelled) |
-| 429 | Rate limited (`Too many requests, try again in a minute`), or the download queue is full |
+| 404 | Route, download, export or B2 file not found |
+| 409 | The download or export has no file (failed or cancelled) |
+| 429 | Rate limited (`Too many requests, try again in a minute`), or the download or export queue is full |
 | 500 | D1, JWT, or an error the code doesn't expect (`Something went wrong`) |
 | 502 | SMTP, fetchr or B2 failed |
 | 503 | `/health` only: D1 unreachable |
@@ -455,7 +547,7 @@ Each alarm polls at most `DOWNLOAD_MAX_QUEUED` jobs. A poll fails on any non-2xx
 
 ### Renders (clip export)
 
-The clip editor's export will use fetchr's render endpoints: one source video already in B2, several clips cut from it, joined in order into **one MP4**, with the caption burned in. The Worker doesn't call them yet; this is the contract it will be built against (fetchr's README has the full reference).
+Clip exports (see [Exports](#exports)) use fetchr's render endpoints: one source video already in B2, several clips cut from it, joined in order into **one MP4**, with the caption burned in. The `DownloadTracker` calls them, through the same `Fetchr` client and rolling code as downloads (`modules/exports/utils.ts`). fetchr's README has the full reference.
 
 | Method | Path | Body | Reply |
 |---|---|---|---|

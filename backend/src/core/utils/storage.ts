@@ -5,6 +5,8 @@
 //   browser save it.
 // Storage.signUrl(): Only signs, with no request to B2, so it's cheap enough for every item in a list. It doesn't check
 //   the file exists.
+// encodeFilename(): RFC 5987 percent-encoding for filename*. encodeURIComponent leaves ! ' ( ) * as they are, which
+//   that grammar doesn't allow, and B2 rejects the link (a title like "Video (clip)" fails), so those are encoded too.
 // encodeKey(): Encodes each segment so the slashes in a key like downloads/<client>/<id>/<file> stay path
 //   separators.
 import { AwsClient } from 'aws4fetch'
@@ -87,7 +89,7 @@ export class Storage {
     signed.searchParams.set('X-Amz-Expires', String(this.urlTtlSeconds))
     signed.searchParams.set(
       'response-content-disposition',
-      filename ? `attachment; filename*=UTF-8''${encodeURIComponent(filename)}` : 'inline',
+      filename ? `attachment; filename*=UTF-8''${encodeFilename(filename)}` : 'inline',
     )
     const presigned = await this.client.sign(signed.toString(), { method: 'GET', aws: { signQuery: true } })
     return presigned.url
@@ -109,6 +111,10 @@ export class Storage {
 
 function xmlValue(xml: string, tag: string): string | undefined {
   return xml.match(new RegExp(`<${tag}>([\\s\\S]*?)</${tag}>`))?.[1]
+}
+
+function encodeFilename(filename: string): string {
+  return encodeURIComponent(filename).replace(/[!'()*]/g, (c) => `%${c.charCodeAt(0).toString(16).toUpperCase()}`)
 }
 
 function encodeKey(key: string): string {

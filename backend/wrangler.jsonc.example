@@ -46,6 +46,15 @@
     "DOWNLOAD_MAX_QUEUED": 10,
     // Added to the name a finished video is saved under (fetchr merges downloads into mp4).
     "DOWNLOAD_FILE_EXTENSION": ".mp4",
+    // Clip exports, rendered by fetchr into one MP4. Most exports queued at once, polled with the downloads on the same
+    // alarm, so DOWNLOAD_MAX_QUEUED + EXPORT_MAX_QUEUED must stay under 50. The clip limits must not be looser than
+    // fetchr's (20 clips, 0.5s per clip, FETCHR_RENDER_MAX_SECONDS in total) or fetchr refuses the render.
+    "EXPORT_MAX_QUEUED": 3,
+    "EXPORT_MAX_CLIPS": 20,
+    "EXPORT_MIN_CLIP_SECONDS": 0.5,
+    "EXPORT_MAX_SECONDS": 600,
+    // Added after the source video's title in the name an export is saved under, before DOWNLOAD_FILE_EXTENSION.
+    "EXPORT_FILE_SUFFIX": " (clip)",
     // How many finished downloads GET /api/v1/dashboard returns.
     "DASHBOARD_RECENT_LIMIT": 6,
     "DOWNLOAD_ALLOWED_HOSTS": ["facebook.com", "www.facebook.com", "m.facebook.com", "web.facebook.com", "fb.watch"],
@@ -67,7 +76,8 @@
     }
   ],
 
-  // One DownloadTracker instance (named DOWNLOAD_TRACKER_NAME) holds fetchr's rolling code, polls fetchr and serves the SSE stream.
+  // One DownloadTracker instance (named DOWNLOAD_TRACKER_NAME) holds fetchr's rolling code, polls fetchr for downloads and
+  // exports, and serves both SSE streams.
   "durable_objects": {
     "bindings": [{ "name": "DOWNLOAD_TRACKER", "class_name": "DownloadTracker" }]
   },
