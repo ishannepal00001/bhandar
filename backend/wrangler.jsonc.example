@@ -28,8 +28,8 @@
     "COOKIE_SECURE": true,
     // The frontend is on another site, so the cookie must be SameSite None (which browsers only accept with Secure).
     "COOKIE_SAME_SITE": "None",
-    // The one origin allowed by CORS and CSRF checks; set it to the deployed frontend's URL.
-    "FRONTEND_ORIGIN": "http://localhost:5173",
+    // The origins allowed by CORS and CSRF checks: the deployed frontend's URL (no trailing slash) and the Vite dev server.
+    "FRONTEND_ORIGINS": ["https://<frontend>.pages.dev", "http://localhost:5173"],
     "SMTP_HOST": "",
     "SMTP_PORT": 465,
     "SMTP_USER": "",

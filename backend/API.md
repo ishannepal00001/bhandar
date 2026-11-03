@@ -17,8 +17,8 @@ The HTTP API served by the Worker in `backend/src`. Every shape below comes from
 | Base path | `/api/v1` (only `/health` is outside it) |
 | Format | JSON in and out (`Content-Type: application/json`), except the SSE stream |
 | Auth | The `bhandar_token` cookie set by `POST /auth/login`. Every `/downloads` and `/dashboard` route needs it; the `/auth` routes don't |
-| CORS | The frontend is on another site. Only `FRONTEND_ORIGIN` is allowed, with credentials, so the frontend must send `credentials: 'include'` on `fetch` and `{ withCredentials: true }` on `EventSource`. The cookie is `SameSite=None; Secure` (`COOKIE_SAME_SITE`, `COOKIE_SECURE`) so the browser sends it cross-site. In dev, Vite proxies `/api` to `:8787`, so calls are same-origin anyway |
-| CSRF | `hono/csrf` rejects form-style requests (`application/x-www-form-urlencoded`, `multipart/form-data`, `text/plain` or no `Content-Type`) with an unsafe method from any origin other than `FRONTEND_ORIGIN`: `403 Forbidden`, as plain text |
+| CORS | The frontend is on another site. Only the `FRONTEND_ORIGINS` (the deployed frontend and the Vite dev server) are allowed, with credentials, so the frontend must send `credentials: 'include'` on `fetch` and `{ withCredentials: true }` on `EventSource`. The cookie is `SameSite=None; Secure` (`COOKIE_SAME_SITE`, `COOKIE_SECURE`) so the browser sends it cross-site. In dev, Vite proxies `/api` to `:8787`, so calls are same-origin anyway |
+| CSRF | `hono/csrf` rejects form-style requests (`application/x-www-form-urlencoded`, `multipart/form-data`, `text/plain` or no `Content-Type`) with an unsafe method from any origin not in `FRONTEND_ORIGINS`: `403 Forbidden`, as plain text |
 | Rate limits | Per client IP (`cf-connecting-ip`). Every `/api/*` request counts against `API_LIMITER` (60 per 10 s). `send-otp` also counts against `SEND_OTP_LIMITER` (3/min) and `login` against `LOGIN_LIMITER` (5/min). Cloudflare counts per location, so the limits are approximate |
 | Timestamps | ISO 8601 strings in UTC, e.g. `2026-10-24T14:00:00.000Z` |
 | Logging | Every `/api/*` request is logged with `hono/logger` |
@@ -539,7 +539,7 @@ Errors: `404 Upload not found`, `409 The file hasn't reached storage yet` (no ob
 | 202 | Download or export queued |
 | 400 | Body isn't JSON (`Body must be valid JSON`) or fails validation (`Invalid request` + `issues`) |
 | 401 | Wrong password or code, or not logged in or session expired |
-| 403 | CSRF check failed: a form-style request from an origin other than `FRONTEND_ORIGIN` (plain-text `Forbidden`) |
+| 403 | CSRF check failed: a form-style request from an origin not in `FRONTEND_ORIGINS` (plain-text `Forbidden`) |
 | 404 | Route, download, export or B2 file not found |
 | 409 | The download or export has no file (failed or cancelled), or an upload isn't in B2 yet |
 | 429 | Rate limited (`Too many requests, try again in a minute`), or the download or export queue is full |

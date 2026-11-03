@@ -1,5 +1,5 @@
 // Entry point: mounts api/v1 routers
-// cors(), csrf(): The frontend is on another site, so only FRONTEND_ORIGIN may call /api with the cookie. Both run
+// cors(), csrf(): The frontend is on another site, so only the FRONTEND_ORIGINS may call /api with the cookie. Both run
 //   before the rate limiter so preflights aren't counted and its 429s carry CORS headers. csrf() rejects form-style
 //   requests from any other origin, which CORS alone doesn't stop.
 // GET /health: Liveness plus a D1 round trip; outside /api so it isn't rate limited.
@@ -31,8 +31,8 @@ import * as uploadsService from './modules/uploads/service'
 const app = new Hono()
 
 app.use('/api/*', logger())
-app.use('/api/*', cors({ origin: env.FRONTEND_ORIGIN, credentials: true }))
-app.use('/api/*', csrf({ origin: env.FRONTEND_ORIGIN }))
+app.use('/api/*', cors({ origin: [...env.FRONTEND_ORIGINS], credentials: true }))
+app.use('/api/*', csrf({ origin: [...env.FRONTEND_ORIGINS] }))
 app.use('/api/*', rateLimit((env) => env.API_LIMITER))
 
 app.route('/api/v1/auth', authRouter)

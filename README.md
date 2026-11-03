@@ -52,7 +52,7 @@ This README covers the whole project: how the backend and frontend are built, ho
 
 ```
  Browser (React SPA)
-   │  cross-site in production (CORS + CSRF allow only FRONTEND_ORIGIN);
+   │  cross-site in production (CORS + CSRF allow only FRONTEND_ORIGINS);
    │  same origin in dev, where /api is proxied to :8787
    │  cookie: bhandar_token (httpOnly, Secure, SameSite=None)
    ▼
@@ -286,7 +286,7 @@ An export is a fetchr render: clips cut from one of the user's completed downloa
 An uploaded video becomes an export's source the first time it's exported.
 
 1. **Ticket.** The editor calls `POST /api/v1/uploads` with the file's name, type and size. The Worker stores a `pending` row and signs a PUT to `uploads/<client_id>/<id>/source<.ext>`, a key fetchr accepts as a render source.
-2. **Upload.** The browser PUTs the file straight to B2 (XHR, for progress). The Worker never handles the bytes, so there's no Workers body limit. The bucket's CORS rules must allow it.
+2. **Upload.** The browser PUTs the file straight to B2 (XHR, for progress). The Worker never handles the bytes, so there's no Workers body limit. The bucket's CORS rules must allow it: copy `backend/b2-cors.json.example` to `backend/b2-cors.json` (gitignored), put in the deployed frontend's origin, and paste it into the B2 console under the bucket's CORS Rules → Custom Rules.
 3. **Complete.** `POST /api/v1/uploads/:id/complete` checks B2 has the object at the announced size and marks it `ready`.
 4. **Export.** `POST /api/v1/exports` with `upload_id` instead of `download_id`. Later exports in the same editor session reuse the upload.
 5. **Cleanup.** Deleting an upload's last export (with none queued) deletes the upload. The daily cron (`scheduled()`) deletes uploads that were never exported once they're `UPLOAD_STALE_HOURS` old.
@@ -354,7 +354,7 @@ type Job = QueuedJob | FinishedJob
 
 ## Frontend
 
-A React 19 single-page app built with Vite. In development, Vite proxies `/api` to the Worker on `127.0.0.1:8787`, so the browser sees one origin. In production the frontend is on another site, so it must send `credentials: 'include'` on `fetch` and `{ withCredentials: true }` on `EventSource`, and the Worker's `FRONTEND_ORIGIN` must be its URL.
+A React 19 single-page app built with Vite. In development, Vite proxies `/api` to the Worker on `127.0.0.1:8787`, so the browser sees one origin. In production the frontend is on another site, so it must send `credentials: 'include'` on `fetch` and `{ withCredentials: true }` on `EventSource`, and the Worker's `FRONTEND_ORIGINS` must include its URL.
 
 ### Routing
 
