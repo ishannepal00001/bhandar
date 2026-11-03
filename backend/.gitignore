@@ -16,3 +16,5 @@ worker-configuration.d.ts
 
 # Filled-in B2 CORS rules: holds the frontend origin; b2-cors.json.example is the committed template
 b2-cors.json
+# Written by deploy.ts during a deploy, then deleted
+wrangler.deploy.json

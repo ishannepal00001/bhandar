@@ -4,7 +4,7 @@
   "type": "module",
   "scripts": {
     "dev": "wrangler dev",
-    "deploy": "wrangler deploy",
+    "deploy": "bun deploy.ts JWT_SECRET SMTP_PASS B2_KEY_ID B2_APP_KEY DOWNLOADER_SEED_CODE",
     "cf-typegen": "wrangler types",
     "db:migrate:local": "wrangler d1 migrations apply bhandardb --local",
     "db:migrate:remote": "wrangler d1 migrations apply bhandardb --remote",

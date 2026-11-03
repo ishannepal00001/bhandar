@@ -92,6 +92,7 @@ bhandar/
 ├── backend/
 │   ├── wrangler.jsonc.example   Worker config template: every var and secret (blank), D1, Durable Object, rate limits
 │   ├── wrangler.jsonc           your filled-in copy (gitignored, holds the secrets)
+│   ├── deploy.ts                `bun run deploy`: deploys with the secrets uploaded as Worker secrets, not vars
 │   ├── API.md                   full API reference
 │   ├── migrations/
 │   │   ├── 0001_init.sql        users and otp tables
@@ -179,6 +180,8 @@ bun run db:migrate:remote
 bun run deploy
 ```
 
+`bun run deploy` runs `backend/deploy.ts` rather than plain `wrangler deploy`. The secrets named in its package.json script are taken out of `vars` and uploaded as encrypted Worker secrets in the same deploy, so they never show in the Cloudflare dashboard or the deploy log. Locally they stay in `wrangler.jsonc` `vars`, where `wrangler dev` reads them.
+
 ## Configuration
 
 All configuration, secrets included, is in `backend/wrangler.jsonc`. That file is gitignored; `backend/wrangler.jsonc.example` is the committed template with the personal values and secrets blank. There is no `config.ts`, no `.env`, no `.dev.vars` and no `process.env`. Code reads config from the Worker bindings, either `import { env } from 'cloudflare:workers'` or `c.env` (for example `new Storage(c.env)`). Vars hold real JSON types (numbers, booleans). `wrangler dev` regenerates `worker-configuration.d.ts` whenever `wrangler.jsonc` changes (`dev.generate_types`). It's gitignored too, because it's generated from the file that holds the secrets; run `bun run cf-typegen` on a fresh clone.
@@ -200,7 +203,7 @@ All configuration, secrets included, is in `backend/wrangler.jsonc`. That file i
 | `vars` | `UPLOAD_MAX_BYTES`, `UPLOAD_URL_TTL_SECONDS`, `UPLOAD_STALE_HOURS` | Largest video that can be uploaded (2 GiB), how long its signed PUT lasts, and how old an upload that was never exported gets before the daily cleanup deletes it |
 | `triggers` | `crons: ["0 3 * * *"]` | Runs `scheduled()` daily for the upload cleanup |
 | `vars` | `DOWNLOAD_ALLOWED_HOSTS` | Hosts a download link may use (Facebook and `fb.watch`) |
-| `vars` (secrets) | `JWT_SECRET`, `SMTP_PASS`, `B2_KEY_ID`, `B2_APP_KEY`, `DOWNLOADER_SEED_CODE` | The JWT signing key, the SMTP password, the B2 application key, and fetchr's first rolling code. They're plain vars, so when deployed they show in the Cloudflare dashboard like any other var |
+| `vars` (secrets) | `JWT_SECRET`, `SMTP_PASS`, `B2_KEY_ID`, `B2_APP_KEY`, `DOWNLOADER_SEED_CODE` | The JWT signing key, the SMTP password, the B2 application key, and fetchr's first rolling code. Plain vars locally; `bun run deploy` uploads them as encrypted Worker secrets, so they never show in the dashboard. A new secret also goes in package.json's deploy script |
 | `d1_databases` | `BHANDAR_DB` → `bhandardb` | The database |
 | `durable_objects` | `DOWNLOAD_TRACKER` → `DownloadTracker` | The download and export poller (SQLite-backed, so it runs on the free plan) |
 | `ratelimits` | `SEND_OTP_LIMITER` 3/min, `LOGIN_LIMITER` 5/min, `API_LIMITER` 60/10s | Per-IP limits. Cloudflare counts them per location, so they're approximate |
