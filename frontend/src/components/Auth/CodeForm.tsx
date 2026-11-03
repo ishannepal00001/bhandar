@@ -4,16 +4,18 @@ import { label, muted, outlineButton, primaryButton } from '../../styles'
 
 function CodeForm({
   length,
+  initialCode = null,
   onSubmit,
   onBack,
   pending = false,
 }: {
   length: number
+  initialCode?: string | null
   onSubmit: (code: string) => void
   onBack: () => void
   pending?: boolean
 }) {
-  const [digits, setDigits] = useState<string[]>(() => Array(length).fill(''))
+  const [digits, setDigits] = useState<string[]>(() => initialCode?.split('') ?? Array(length).fill(''))
   const inputs = useRef<(HTMLInputElement | null)[]>([])
   const complete = digits.every(Boolean)
 

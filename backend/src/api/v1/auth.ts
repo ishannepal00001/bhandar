@@ -1,4 +1,5 @@
 // /api/v1/auth: accepts requests, returns JSON
+// /send-otp: Passes the request's Origin on, so the mail's sign-in link opens the frontend the code was asked from.
 import { env } from 'cloudflare:workers'
 import { Hono } from 'hono'
 import type { Context } from 'hono'
@@ -28,7 +29,7 @@ export const authRouter = new Hono()
 
 authRouter.post('/send-otp', rateLimit((env) => env.SEND_OTP_LIMITER), async (c) => {
   const body = await readJson(c)
-  return c.json(await fromController(() => authController.sendOtp(body)))
+  return c.json(await fromController(() => authController.sendOtp(body, c.req.header('Origin'))))
 })
 
 authRouter.post('/login', rateLimit((env) => env.LOGIN_LIMITER), async (c) => {

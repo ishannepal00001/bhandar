@@ -1,4 +1,6 @@
 // auth: request handling, validated against schema
+// sendOtp(): The origin becomes the mail's sign-in link only when it's one of FRONTEND_ORIGINS; any other origin (or
+//   none) sends the mail without the link.
 // logout(): Stops at the controller: clears the auth cookie, no service or db involved.
 import type { Context } from 'hono'
 import { deleteCookie } from 'hono/cookie'
@@ -39,9 +41,11 @@ async function fromService<T>(run: () => Promise<T>): Promise<T> {
   }
 }
 
-export async function sendOtp(body: unknown): Promise<SendOtpResult> {
+export async function sendOtp(body: unknown, origin: string | undefined): Promise<SendOtpResult> {
   const input = parse(sendOtpRequestSchema, body)
-  return fromService(() => authService.sendOtp(input))
+  const origins: readonly string[] = env.FRONTEND_ORIGINS
+  const frontend = origin && origins.includes(origin) ? origin : null
+  return fromService(() => authService.sendOtp(input, frontend))
 }
 
 export async function login(body: unknown): Promise<LoginResult> {

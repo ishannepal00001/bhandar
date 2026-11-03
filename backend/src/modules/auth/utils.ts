@@ -11,6 +11,12 @@
 // verifyToken(): Returns undefined for a bad, tampered or expired token; throws only when the secret is missing.
 // sendOtpMail(): On port 465 it opens the TLS socket itself by hostname. Nodemailer would resolve the host to an IP
 //   first, and Workers checks the certificate against the address it connects to, so Gmail's cert fails on its IP.
+//   The code leads the subject, so phones and Gmail show it (and offer their own copy button) in the notification.
+// otpMailHtml(): The app's look in what mail clients render: tables, inline styles, its three colours, square corners
+//   and fonts that fall back to Georgia and the system monospace. Mail clients run no script, so the code can't be
+//   copied by a button; instead the code selects whole on one tap (user-select: all), and the button opens
+//   <frontend>/auth#code=<code>, which fills the code in. The code rides in the fragment, which browsers never send to
+//   a server. With no frontend the button is left out.
 import { randomInt } from 'node:crypto'
 import tls from 'node:tls'
 import { sign, verify } from 'hono/jwt'
@@ -26,7 +32,7 @@ export function generateOtp(): string {
   return randomInt(0, 10 ** length).toString().padStart(length, '0')
 }
 
-export async function sendOtpMail(to: string, code: string): Promise<void> {
+export async function sendOtpMail(to: string, code: string, frontend: string | null): Promise<void> {
   const { SMTP_HOST: host, SMTP_PORT: port, SMTP_USER: user, SMTP_PASS: pass, MAIL_FROM: from } = env
   if (!host || !user || !pass || !from) throw new AuthUtilsError('Mail is not configured')
 
@@ -52,12 +58,68 @@ export async function sendOtpMail(to: string, code: string): Promise<void> {
     await transport.sendMail({
       from,
       to,
-      subject: env.OTP_MAIL_SUBJECT,
-      text: `Your login code is ${code}. It expires in ${env.OTP_TTL_MINUTES} minutes.`,
+      subject: `${code} · ${env.OTP_MAIL_SUBJECT}`,
+      text:
+        `Your login code is ${code}. It expires in ${env.OTP_TTL_MINUTES} minutes.` +
+        (frontend ? `\n\nSign in with it: ${signInUrl(frontend, code)}` : ''),
+      html: otpMailHtml(code, frontend),
     })
   } catch (err) {
     throw new AuthUtilsError('Failed to send OTP mail', { cause: err })
   }
+}
+
+function signInUrl(frontend: string, code: string): string {
+  return `${frontend}/auth#code=${code}`
+}
+
+function otpMailHtml(code: string, frontend: string | null): string {
+  const navy = '#0B2350'
+  const gold = '#B08A3C'
+  const cream = '#F3EFE6'
+  const muted = '#5C6B85'
+  const serif = "Fraunces, Georgia, 'Times New Roman', serif"
+  const sans = "'IBM Plex Sans', -apple-system, 'Segoe UI', Roboto, Arial, sans-serif"
+  const mono = "'IBM Plex Mono', ui-monospace, Menlo, Consolas, 'Courier New', monospace"
+
+  const button = frontend
+    ? `<tr><td style="padding:0 32px 8px">
+        <table role="presentation" cellpadding="0" cellspacing="0" width="100%"><tr>
+          <td align="center" bgcolor="${navy}" style="background:${navy}">
+            <a href="${signInUrl(frontend, code)}" style="display:block;padding:14px 24px;font-family:${sans};font-size:15px;font-weight:600;color:${cream};text-decoration:none">Sign in with this code &rarr;</a>
+          </td>
+        </tr></table>
+      </td></tr>
+      <tr><td style="padding:0 32px 28px;font-family:${sans};font-size:12px;line-height:18px;color:${muted};text-align:center">Opens Bhandar with the code filled in.</td></tr>`
+    : ''
+
+  return `<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="color-scheme" content="light"><meta name="supported-color-schemes" content="light"><title>Your Bhandar login code</title></head>
+<body style="margin:0;padding:0;background:${cream}">
+<div style="display:none;max-height:0;overflow:hidden">Your login code is ${code}. It expires in ${env.OTP_TTL_MINUTES} minutes.</div>
+<table role="presentation" cellpadding="0" cellspacing="0" width="100%" bgcolor="${cream}" style="background:${cream}"><tr><td align="center" style="padding:40px 16px">
+  <table role="presentation" cellpadding="0" cellspacing="0" width="100%" style="max-width:440px;background:${cream};border:1px solid #D9D5CF;border-top:3px solid ${gold}">
+    <tr><td style="padding:32px 32px 0">
+      <table role="presentation" cellpadding="0" cellspacing="0"><tr>
+        <td width="36" height="36" align="center" bgcolor="${navy}" style="background:${navy};font-family:${sans};font-size:20px;font-weight:700;line-height:36px;color:#D4AF5F">&darr;</td>
+        <td style="padding-left:12px;font-family:${serif};font-size:22px;font-weight:600;color:${navy}">Bhandar</td>
+      </tr></table>
+    </td></tr>
+    <tr><td style="padding:28px 32px 0;font-family:${mono};font-size:11px;letter-spacing:2px;text-transform:uppercase;color:${gold}">Login code</td></tr>
+    <tr><td style="padding:8px 32px 0;font-family:${serif};font-size:26px;line-height:32px;color:${navy}">Here's your code</td></tr>
+    <tr><td style="padding:8px 32px 24px;font-family:${sans};font-size:14px;line-height:21px;color:${muted}">Enter it on the sign-in page to finish logging in. It works once and expires in ${env.OTP_TTL_MINUTES} minutes.</td></tr>
+    <tr><td style="padding:0 32px 24px">
+      <table role="presentation" cellpadding="0" cellspacing="0" width="100%"><tr>
+        <td align="center" style="padding:18px 8px 18px 18px;border:1px solid ${navy};font-family:${mono};font-size:34px;font-weight:500;letter-spacing:10px;color:${navy};-webkit-user-select:all;user-select:all">${code}</td>
+      </tr></table>
+      <p style="margin:8px 0 0;font-family:${sans};font-size:12px;color:${muted};text-align:center">Tap the code once to select all of it.</p>
+    </td></tr>
+    ${button}
+    <tr><td style="padding:16px 32px 24px;border-top:1px solid #D9D5CF;font-family:${sans};font-size:12px;line-height:18px;color:${muted}">Didn't try to sign in? Someone may know your password. Don't share this code; it expires on its own.</td></tr>
+  </table>
+</td></tr></table>
+</body></html>`
 }
 
 function bytesToHex(bytes: ArrayBuffer): string {

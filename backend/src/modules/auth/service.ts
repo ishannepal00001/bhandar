@@ -21,7 +21,7 @@ async function fromModel<T>(run: () => Promise<T>): Promise<T> {
   }
 }
 
-export async function sendOtp(input: SendOtpRequest): Promise<SendOtpResult> {
+export async function sendOtp(input: SendOtpRequest, frontend: string | null): Promise<SendOtpResult> {
   const users = await fromModel(() => authModel.listUsers())
 
   let user: User | undefined
@@ -39,7 +39,7 @@ export async function sendOtp(input: SendOtpRequest): Promise<SendOtpResult> {
   await fromModel(() => authModel.replaceOtp({ user_id: user.id, code_hash: codeHash, expires_at: expiresAt }))
 
   try {
-    await sendOtpMail(user.email, code)
+    await sendOtpMail(user.email, code, frontend)
   } catch (err) {
     if (!(err instanceof AuthUtilsError)) throw err
     throw new AuthServiceError(err.message, 'MAIL_ERROR', { cause: err })

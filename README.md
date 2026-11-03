@@ -185,7 +185,7 @@ All configuration, secrets included, is in `backend/wrangler.jsonc`. That file i
 
 | Where | Keys | Purpose |
 |---|---|---|
-| `vars` | `OTP_LENGTH`, `OTP_TTL_MINUTES`, `OTP_MAIL_SUBJECT` | Login codes: number of digits, lifetime and email subject |
+| `vars` | `OTP_LENGTH`, `OTP_TTL_MINUTES`, `OTP_MAIL_SUBJECT` | Login codes: number of digits, lifetime and email subject (sent after the code, e.g. `482913 · Your Bhandar login code`) |
 | `vars` | `PASSWORD_MIN_LENGTH`, `PASSWORD_SALT_BYTES` | Password rule and salt size |
 | `vars` | `JWT_ALGORITHM`, `JWT_TTL_DAYS` | Login token signing and lifetime |
 | `vars` | `COOKIE_NAME`, `COOKIE_SECURE`, `COOKIE_SAME_SITE` | The auth cookie |
@@ -254,7 +254,7 @@ Queued jobs aren't in D1. They live in the DownloadTracker's own SQLite storage 
 
 ### How login works
 
-1. **`POST /api/v1/auth/send-otp`** with `{ password }`. The controller checks it against the password rule: at least `PASSWORD_MIN_LENGTH` (8) characters, with an uppercase letter, a lowercase letter, a number and a symbol. The service hashes it with PBKDF2-SHA256 and each user's salt and compares in constant time. On a match, it generates an `OTP_LENGTH` (6) digit code, replaces any earlier code of that user with its SHA-256 hash with an expiry of `OTP_TTL_MINUTES` (10), and emails the code through Nodemailer.
+1. **`POST /api/v1/auth/send-otp`** with `{ password }`. The controller checks it against the password rule: at least `PASSWORD_MIN_LENGTH` (8) characters, with an uppercase letter, a lowercase letter, a number and a symbol. The service hashes it with PBKDF2-SHA256 and each user's salt and compares in constant time. On a match, it generates an `OTP_LENGTH` (6) digit code, replaces any earlier code of that user with its SHA-256 hash with an expiry of `OTP_TTL_MINUTES` (10), and emails the code through Nodemailer. The mail is in the app's colours, with the code large and selectable in one tap. When the request's `Origin` is one of `FRONTEND_ORIGINS`, it also has a **Sign in with this code** button that opens `<origin>/auth#code=<code>`; the sign-in page fills the code in from the fragment (never sent to a server) and wipes it from the address bar.
 2. **`POST /api/v1/auth/login`** with `{ code }`. The service looks up the hashed code, checks it hasn't expired, and signs an `HS256` JWT with `{ sub, name }` valid for `JWT_TTL_DAYS` (7). A wrong code counts against the live code, which is deleted after `OTP_MAX_ATTEMPTS` (5) wrong tries, so a new one needs the password again. A right code is deleted only after the token is signed. The response sets the `bhandar_token` cookie (`HttpOnly`, `Secure`, `SameSite=None`, since the frontend is on another site) and also returns the token in the body for clients without cookies.
 3. **Protected routes** run `isUser`, which returns `401 Not logged in` with no cookie and `401 Invalid or expired session` for a bad or expired token.
 4. **`POST /api/v1/auth/logout`** clears the cookie. The JWT isn't revoked; it's only removed from the browser.

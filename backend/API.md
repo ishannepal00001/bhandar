@@ -88,7 +88,7 @@ Login takes two steps: send the password to get a code by email, then send the c
 
 ### `POST /api/v1/auth/send-otp`
 
-Checks the password against every user. On a match, it emails that user an `OTP_LENGTH` (6) digit code, valid for `OTP_TTL_MINUTES` (10). A new code replaces any earlier one the user hasn't used, so only the latest code works.
+Checks the password against every user. On a match, it emails that user an `OTP_LENGTH` (6) digit code, valid for `OTP_TTL_MINUTES` (10). A new code replaces any earlier one the user hasn't used, so only the latest code works. If the request's `Origin` header is one of `FRONTEND_ORIGINS`, the mail also links to `<origin>/auth#code=<code>`, which opens the sign-in page with the code filled in.
 
 Rate limits: `SEND_OTP_LIMITER` (3/min) and `API_LIMITER`.
 
