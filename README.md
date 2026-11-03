@@ -99,7 +99,8 @@ bhandar/
 │   │   ├── 0003_downloads.sql   finished downloads table
 │   │   ├── 0004_download_thumbnail.sql   thumbnail column
 │   │   ├── 0005_exports.sql     finished exports table
-│   │   └── 0006_uploads.sql     uploads table; exports take a download or an upload
+│   │   ├── 0006_uploads.sql     uploads table; exports take a download or an upload
+│   │   └── 0007_otp_attempts.sql  wrong-code count on each login code
 │   └── src/
 │       ├── index.ts             Hono app: logger, API rate limit, routers, /health, error mapping, exports DownloadTracker
 │       ├── api/v1/
@@ -204,7 +205,7 @@ All configuration, secrets included, is in `backend/wrangler.jsonc`. That file i
 | `durable_objects` | `DOWNLOAD_TRACKER` → `DownloadTracker` | The download and export poller (SQLite-backed, so it runs on the free plan) |
 | `ratelimits` | `SEND_OTP_LIMITER` 3/min, `LOGIN_LIMITER` 5/min, `API_LIMITER` 60/10s | Per-IP limits. Cloudflare counts them per location, so they're approximate |
 
-The login user comes from `migrations/0002_seed_user.sql`. It's gitignored because it holds your email and password hash. The committed `.sql.example` shows how to generate the hash with `openssl` and `sha256sum`.
+The login user comes from `migrations/0002_seed_user.sql`. It's gitignored because it holds your email and password hash. The committed `.sql.example` shows how to generate the PBKDF2 hash with a Python one-liner that prompts for the password.
 
 The frontend has no config of its own beyond `src/config.ts` (the OTP length the code form renders) and the dev proxy in `vite.config.ts`.
 
@@ -243,8 +244,8 @@ D1 (SQLite) holds five tables, created by the migrations:
 
 | Table | Migration | Holds |
 |---|---|---|
-| `users` | `0001_init.sql` | `name`, `email`, `password` (SHA-256 of `<salt>:<password>`), `password_salt` |
-| `otp` | `0001_init.sql` | `user_id`, `code_hash` (SHA-256 of the code), `expires_at`. Indexed on `code_hash` |
+| `users` | `0001_init.sql` | `name`, `email`, `password` (`pbkdf2_sha256$<iterations>$<hex>`, PBKDF2-SHA256 with the salt), `password_salt` |
+| `otp` | `0001_init.sql` | `user_id`, `code_hash` (SHA-256 of the code), `expires_at`, `attempts` (`0007_otp_attempts.sql`). Indexed on `code_hash` |
 | `downloads` | `0003_downloads.sql` | Finished jobs only: `id` (fetchr's job id), `user_id`, `source_url`, `status` (`completed`/`failed`/`cancelled`), `title`, `filename` (the B2 key), `content_type`, `filesize`, `error`, `created_at`, `updated_at`. Indexed on `(user_id, created_at DESC)` |
 | `exports` | `0005_exports.sql`, `0006_uploads.sql` | Finished exports only: `id` (fetchr's render id), `user_id`, `download_id` or `upload_id` (the source, exactly one; not foreign keys so deleting a download keeps its exports), `title`, `clips` and `caption` (JSON), `status`, `filename` (the B2 key under `renders/`), `content_type`, `filesize`, `thumbnail`, `error`, `created_at`, `updated_at`. Indexed on `(user_id, created_at DESC)` |
 | `uploads` | `0006_uploads.sql` | Videos uploaded to export from: `id`, `user_id`, `name` (on the device), `filename` (the B2 key `uploads/<client_id>/<id>/source<.ext>`), `content_type`, `size`, `status` (`pending` until B2 has it, then `ready`), `created_at` |
@@ -253,8 +254,8 @@ Queued jobs aren't in D1. They live in the DownloadTracker's own SQLite storage 
 
 ### How login works
 
-1. **`POST /api/v1/auth/send-otp`** with `{ password }`. The controller checks it against the password rule: at least `PASSWORD_MIN_LENGTH` (8) characters, with an uppercase letter, a lowercase letter, a number and a symbol. The service hashes it with each user's salt and compares. On a match, it generates an `OTP_LENGTH` (6) digit code, stores its SHA-256 hash with an expiry of `OTP_TTL_MINUTES` (10), and emails the code through Nodemailer.
-2. **`POST /api/v1/auth/login`** with `{ code }`. The service looks up the hashed code, checks it hasn't expired, and signs an `HS256` JWT with `{ sub, name }` valid for `JWT_TTL_DAYS` (7). The code is deleted only after the token is signed, so a failed login doesn't use it up. The response sets the `bhandar_token` cookie (`HttpOnly`, `Secure`, `SameSite=None`, since the frontend is on another site) and also returns the token in the body for clients without cookies.
+1. **`POST /api/v1/auth/send-otp`** with `{ password }`. The controller checks it against the password rule: at least `PASSWORD_MIN_LENGTH` (8) characters, with an uppercase letter, a lowercase letter, a number and a symbol. The service hashes it with PBKDF2-SHA256 and each user's salt and compares in constant time. On a match, it generates an `OTP_LENGTH` (6) digit code, replaces any earlier code of that user with its SHA-256 hash with an expiry of `OTP_TTL_MINUTES` (10), and emails the code through Nodemailer.
+2. **`POST /api/v1/auth/login`** with `{ code }`. The service looks up the hashed code, checks it hasn't expired, and signs an `HS256` JWT with `{ sub, name }` valid for `JWT_TTL_DAYS` (7). A wrong code counts against the live code, which is deleted after `OTP_MAX_ATTEMPTS` (5) wrong tries, so a new one needs the password again. A right code is deleted only after the token is signed. The response sets the `bhandar_token` cookie (`HttpOnly`, `Secure`, `SameSite=None`, since the frontend is on another site) and also returns the token in the body for clients without cookies.
 3. **Protected routes** run `isUser`, which returns `401 Not logged in` with no cookie and `401 Invalid or expired session` for a bad or expired token.
 4. **`POST /api/v1/auth/logout`** clears the cookie. The JWT isn't revoked; it's only removed from the browser.
 

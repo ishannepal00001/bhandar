@@ -88,7 +88,7 @@ Login takes two steps: send the password to get a code by email, then send the c
 
 ### `POST /api/v1/auth/send-otp`
 
-Checks the password against every user. On a match, it emails that user an `OTP_LENGTH` (6) digit code, valid for `OTP_TTL_MINUTES` (10).
+Checks the password against every user. On a match, it emails that user an `OTP_LENGTH` (6) digit code, valid for `OTP_TTL_MINUTES` (10). A new code replaces any earlier one the user hasn't used, so only the latest code works.
 
 Rate limits: `SEND_OTP_LIMITER` (3/min) and `API_LIMITER`.
 
@@ -166,10 +166,10 @@ Errors:
 |---|---|---|
 | 400 | `Body must be valid JSON` | Body isn't JSON |
 | 400 | `Invalid request` | `issues.code` holds `Code is required` or `Code must be 6 digits` |
-| 401 | `Invalid code` | Wrong, expired, or already used code |
+| 401 | `Invalid code` | Wrong, expired, or already used code. Each wrong code counts against the live code, which is deleted after `OTP_MAX_ATTEMPTS` (5); then a new one has to be sent |
 | 429 | `Too many requests, try again in a minute` | Rate limited |
 | 500 | `JWT secret is not configured` / `Failed to sign token` | Token error |
-| 500 | `Failed to look up OTP` / `Failed to look up user` / `Failed to delete OTP` | D1 error |
+| 500 | `Failed to look up OTP` / `Failed to record OTP attempt` / `Failed to look up user` / `Failed to delete OTP` | D1 error |
 
 ### `POST /api/v1/auth/logout`
 

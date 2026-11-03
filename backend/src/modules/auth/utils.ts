@@ -1,6 +1,12 @@
 // auth: helpers
 // sha256Hex(): SHA-256 with Web Crypto, which Workers and Bun both provide.
-// hashPassword(): SHA-256(salt + password) with a random salt.
+// PASSWORD_SCHEME: The prefix of a stored password, "pbkdf2_sha256$<iterations>$<hex>". The iteration count is stored with
+//   the hash, so changing PASSWORD_HASH_ITERATIONS doesn't break a password hashed under the old count.
+// pbkdf2Hex(): PBKDF2-HMAC-SHA256 with Web Crypto; the salt is the hex in users.password_salt, decoded to bytes. Workers
+//   caps iterations at 100000, and on Workers Free the whole request has about 10ms of CPU, which is why
+//   PASSWORD_HASH_ITERATIONS is lower.
+// hashPassword(): A random PASSWORD_SALT_BYTES salt and the hash in PASSWORD_SCHEME form.
+// verifyPassword(): False for a stored value that isn't in PASSWORD_SCHEME form. Compares in constant time.
 // hashCode(): Unsalted so a code can be looked up by its hash; codes are single use and short-lived.
 // verifyToken(): Returns undefined for a bad, tampered or expired token; throws only when the secret is missing.
 // sendOtpMail(): On port 465 it opens the TLS socket itself by hostname. Nodemailer would resolve the host to an IP
@@ -12,6 +18,8 @@ import nodemailer from 'nodemailer'
 import { env } from 'cloudflare:workers'
 import { AuthUtilsError } from './utils.error'
 import type { TokenUser } from './utils.types'
+
+const PASSWORD_SCHEME = 'pbkdf2_sha256'
 
 export function generateOtp(): string {
   const length = env.OTP_LENGTH
@@ -60,13 +68,34 @@ async function sha256Hex(input: string): Promise<string> {
   return bytesToHex(await crypto.subtle.digest('SHA-256', new TextEncoder().encode(input)))
 }
 
-export async function hashPassword(password: string): Promise<{ hash: string; salt: string }> {
-  const salt = bytesToHex(crypto.getRandomValues(new Uint8Array(env.PASSWORD_SALT_BYTES)).buffer)
-  return { hash: await sha256Hex(`${salt}:${password}`), salt }
+function hexToBytes(hex: string): Uint8Array {
+  return new Uint8Array((hex.match(/../g) ?? []).map((byte) => parseInt(byte, 16)))
 }
 
-export async function verifyPassword(password: string, salt: string, expectedHash: string): Promise<boolean> {
-  return (await sha256Hex(`${salt}:${password}`)) === expectedHash
+async function pbkdf2Hex(password: string, salt: string, iterations: number): Promise<string> {
+  const key = await crypto.subtle.importKey('raw', new TextEncoder().encode(password), 'PBKDF2', false, ['deriveBits'])
+  const bits = await crypto.subtle.deriveBits(
+    { name: 'PBKDF2', hash: 'SHA-256', salt: hexToBytes(salt), iterations },
+    key,
+    256,
+  )
+  return bytesToHex(bits)
+}
+
+export async function hashPassword(password: string): Promise<{ hash: string; salt: string }> {
+  const salt = bytesToHex(crypto.getRandomValues(new Uint8Array(env.PASSWORD_SALT_BYTES)).buffer)
+  const iterations = env.PASSWORD_HASH_ITERATIONS
+  return { hash: `${PASSWORD_SCHEME}$${iterations}$${await pbkdf2Hex(password, salt, iterations)}`, salt }
+}
+
+export async function verifyPassword(password: string, salt: string, stored: string): Promise<boolean> {
+  const [scheme, rounds, expected] = stored.split('$')
+  const iterations = Number(rounds)
+  if (scheme !== PASSWORD_SCHEME || !Number.isInteger(iterations) || iterations <= 0 || !expected) return false
+
+  const actual = new TextEncoder().encode(await pbkdf2Hex(password, salt, iterations))
+  const wanted = new TextEncoder().encode(expected)
+  return actual.byteLength === wanted.byteLength && crypto.subtle.timingSafeEqual(actual, wanted)
 }
 
 export function hashCode(code: string): Promise<string> {

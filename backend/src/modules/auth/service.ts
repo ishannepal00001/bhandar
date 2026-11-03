@@ -1,5 +1,7 @@
 // auth: business logic
-// login(): The code is deleted last, so a failed login doesn't use it up.
+// sendOtp(): A new code replaces any earlier one, so at most one code per user is ever valid.
+// login(): A wrong code counts against the live code, which is deleted after OTP_MAX_ATTEMPTS, so a new one needs the
+//   password again. A right code is deleted last, so a login that fails after the lookup doesn't use it up.
 import { env } from 'cloudflare:workers'
 import type { LoginRequest, SendOtpRequest } from '../../../../schemas/auth'
 import * as authModel from './model'
@@ -34,7 +36,7 @@ export async function sendOtp(input: SendOtpRequest): Promise<SendOtpResult> {
   const code = generateOtp()
   const expiresAt = new Date(Date.now() + env.OTP_TTL_MINUTES * 60_000).toISOString()
   const codeHash = await hashCode(code)
-  await fromModel(() => authModel.createOtp({ user_id: user.id, code_hash: codeHash, expires_at: expiresAt }))
+  await fromModel(() => authModel.replaceOtp({ user_id: user.id, code_hash: codeHash, expires_at: expiresAt }))
 
   try {
     await sendOtpMail(user.email, code)
@@ -48,8 +50,12 @@ export async function sendOtp(input: SendOtpRequest): Promise<SendOtpResult> {
 
 export async function login(input: LoginRequest): Promise<LoginResult> {
   const codeHash = await hashCode(input.code)
-  const otp = await fromModel(() => authModel.findValidOtp(codeHash, new Date().toISOString()))
-  if (!otp) throw new AuthServiceError('Invalid code', 'INVALID_CODE')
+  const now = new Date().toISOString()
+  const otp = await fromModel(() => authModel.findValidOtp(codeHash, now))
+  if (!otp) {
+    await fromModel(() => authModel.recordFailedAttempt(now, env.OTP_MAX_ATTEMPTS))
+    throw new AuthServiceError('Invalid code', 'INVALID_CODE')
+  }
 
   const user = await fromModel(() => authModel.findUserById(otp.user_id))
   if (!user) throw new AuthServiceError('Invalid code', 'INVALID_CODE')

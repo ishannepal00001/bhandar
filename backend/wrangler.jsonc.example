@@ -14,9 +14,14 @@
   "vars": {
     "OTP_LENGTH": 6,
     "OTP_TTL_MINUTES": 10,
+    // Wrong codes a live code survives; after that it's deleted and a new one needs the password again.
+    "OTP_MAX_ATTEMPTS": 5,
     "OTP_MAIL_SUBJECT": "Your Bhandar login code",
     "PASSWORD_MIN_LENGTH": 8,
     "PASSWORD_SALT_BYTES": 16,
+    // PBKDF2-SHA256 rounds for new password hashes (stored hashes keep their own count). Workers allows at most 100000,
+    // but Workers Free gives a request about 10ms of CPU and 20000 takes about 5ms.
+    "PASSWORD_HASH_ITERATIONS": 20000,
     "JWT_ALGORITHM": "HS256",
     "JWT_TTL_DAYS": 7,
     "COOKIE_NAME": "bhandar_token",
