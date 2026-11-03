@@ -5,6 +5,9 @@ export default {
   theme: {
     extend: {
       fontFamily: {
+        serif: ["Fraunces", "Georgia", "serif"],
+        sans: ["IBM Plex Sans", "system-ui", "sans-serif"],
+        mono: ["IBM Plex Mono", "ui-monospace", "monospace"],
         // clip captions on the video; Noto covers Devanagari, which Montserrat lacks
         caption: ["Montserrat", "Noto Sans Devanagari", "Impact", "Arial Narrow", "sans-serif"],
       },
@@ -22,6 +25,18 @@ export default {
         },
       },
       keyframes: {
+        "fade-in": {
+          from: { opacity: "0" },
+          to: { opacity: "1" },
+        },
+        "fade-up": {
+          from: { opacity: "0", transform: "translateY(0.5rem)" },
+          to: { opacity: "1", transform: "translateY(0)" },
+        },
+        indeterminate: {
+          from: { transform: "translateX(-100%)" },
+          to: { transform: "translateX(300%)" },
+        },
         marquee: {
           from: { transform: "translateX(0)" },
           to: { transform: "translateX(calc(-50% - 0.5rem))" },
@@ -36,6 +51,9 @@ export default {
         },
       },
       animation: {
+        "fade-in": "fade-in 200ms ease-out both",
+        "fade-up": "fade-up 300ms ease-out both",
+        indeterminate: "indeterminate 1.4s ease-in-out infinite",
         marquee: "marquee 40s linear infinite",
         "step-next": "step-next 300ms ease-out",
         "step-prev": "step-prev 300ms ease-out",

@@ -1,3 +1,5 @@
+// Stats: One hairline-ruled strip (gap-px over the border colour), two across on phones and four on wide screens. A
+//   stat that needs attention (anything queued or failed) shows its number in the accent colour.
 import { Link } from '@tanstack/react-router'
 import {
   ArrowRight,
@@ -7,17 +9,19 @@ import {
   TriangleAlert,
   type LucideIcon,
 } from 'lucide-react'
+import { useState } from 'react'
 import DownloadQueue from '../components/Downloads/DownloadQueue'
 import HeaderActions from '../components/HeaderActions'
 import Marquee from '../components/Marquee'
+import PageHeader from '../components/PageHeader'
 import VideoCard from '../components/VideoCard'
 import { config } from '../config'
 import { dashboardFacade } from '../facades/dashboard'
-import { muted, panel } from '../styles'
+import { label, muted } from '../styles'
 import type { Dashboard } from '../types/dashboard'
 import { formatBytes } from '../utils/format'
 
-type Stat = { label: string; value: string; icon: LucideIcon }
+type Stat = { label: string; value: string; icon: LucideIcon; alert: boolean }
 
 const emptyDashboard: Dashboard = {
   stats: { downloads: 0, storage: 0, queued: 0, failed: 0 },
@@ -25,78 +29,70 @@ const emptyDashboard: Dashboard = {
   recent: [],
 }
 
+const today = new Intl.DateTimeFormat(undefined, { weekday: 'long', day: 'numeric', month: 'long' })
+
 function DashboardPage() {
   const { data = emptyDashboard } = dashboardFacade.useDashboard()
   const { stats: totals, queued, recent } = data
+  const [date] = useState(() => today.format(new Date()))
 
   const stats: Stat[] = [
-    { label: 'Downloads', value: String(totals.downloads), icon: Download },
-    { label: 'Storage', value: formatBytes(totals.storage), icon: HardDrive },
-    { label: 'Queued', value: String(totals.queued), icon: LoaderCircle },
-    { label: 'Failed', value: String(totals.failed), icon: TriangleAlert },
+    { label: 'Downloads', value: String(totals.downloads), icon: Download, alert: false },
+    { label: 'Storage', value: formatBytes(totals.storage), icon: HardDrive, alert: false },
+    { label: 'Queued', value: String(totals.queued), icon: LoaderCircle, alert: totals.queued > 0 },
+    { label: 'Failed', value: String(totals.failed), icon: TriangleAlert, alert: totals.failed > 0 },
   ]
 
   return (
-    <div className="min-h-screen bg-background text-primary dark:bg-night-background dark:text-night-primary">
-      <main className="mx-auto max-w-7xl space-y-6 px-4 py-6 sm:space-y-8 sm:px-6 sm:py-8">
-        <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-          <h1 className="font-serif text-3xl">Dashboard</h1>
-          <HeaderActions />
-        </div>
+    <main className="mx-auto max-w-7xl animate-fade-up space-y-8 px-4 py-6 motion-reduce:animate-none sm:space-y-10 sm:px-6 sm:py-10">
+      <PageHeader eyebrow={date} title="Dashboard" actions={<HeaderActions />} />
 
-        <section className="flex flex-col gap-3 sm:grid sm:grid-cols-2 sm:gap-4 lg:grid-cols-4">
-          {stats.map(({ label, value, icon: Icon }) => (
-            <div key={label} className={panel}>
-              {/* Mobile: one full-width row per stat */}
-              <div className="flex items-center justify-between gap-4 p-4 sm:hidden">
-                <div className="flex min-w-0 items-center gap-3">
-                  <span className="flex h-10 w-10 shrink-0 items-center justify-center border border-primary/15 dark:border-night-primary/15">
-                    <Icon size={18} className={muted} />
-                  </span>
-                  <p className={`min-w-0 text-xs uppercase tracking-widest ${muted}`}>{label}</p>
-                </div>
-                <p className="shrink-0 font-serif text-2xl tabular-nums">{value}</p>
-              </div>
-
-              {/* Larger screens: card grid */}
-              <div className="hidden p-5 sm:block">
-                <div className="flex items-center justify-between">
-                  <p className={`text-xs uppercase tracking-widest ${muted}`}>{label}</p>
-                  <Icon size={18} className={muted} />
-                </div>
-                <p className="mt-2 font-serif text-3xl">{value}</p>
-              </div>
+      <section className="grid grid-cols-2 gap-px border border-primary/15 bg-primary/15 lg:grid-cols-4 dark:border-night-primary/15 dark:bg-night-primary/15">
+        {stats.map(({ label: name, value, icon: Icon, alert }) => (
+          <div key={name} className="bg-background p-4 sm:p-6 dark:bg-night-background">
+            <div className="flex items-center justify-between gap-2">
+              <p className={label}>{name}</p>
+              <Icon size={16} className={alert ? 'text-accent dark:text-night-accent' : muted} />
             </div>
-          ))}
-        </section>
-
-        <DownloadQueue items={queued} />
-
-        <section>
-          <div className="flex items-center justify-between pb-4">
-            <h2 className="font-serif text-xl">Recent Downloads</h2>
-            <Link
-              to="/downloads"
-              className={`flex items-center gap-1 text-sm underline-offset-4 hover:underline ${muted}`}
+            <p
+              className={`mt-4 font-serif text-3xl tabular-nums tracking-tight sm:text-5xl ${
+                alert ? 'text-accent dark:text-night-accent' : ''
+              }`}
             >
-              View all
-              <ArrowRight size={14} />
-            </Link>
+              {value}
+            </p>
           </div>
-          {recent.length === 0 ? (
-            <p className={`text-sm ${muted}`}>No downloads yet.</p>
-          ) : recent.length > config.dashboard.marqueeAbove ? (
-            <Marquee items={recent} />
-          ) : (
-            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
-              {recent.map((job) => (
-                <VideoCard key={job.id} job={job} actions={false} />
-              ))}
-            </div>
-          )}
-        </section>
-      </main>
-    </div>
+        ))}
+      </section>
+
+      <DownloadQueue items={queued} />
+
+      <section>
+        <div className="flex items-end justify-between pb-4">
+          <h2 className="font-serif text-2xl">Recent downloads</h2>
+          <Link
+            to="/downloads"
+            className={`group flex items-center gap-1 text-sm hover:text-primary dark:hover:text-night-primary ${muted}`}
+          >
+            View all
+            <ArrowRight size={14} className="transition-transform group-hover:translate-x-0.5" />
+          </Link>
+        </div>
+        {recent.length === 0 ? (
+          <p className={`border border-dashed border-primary/20 px-5 py-10 text-center text-sm dark:border-night-primary/20 ${muted}`}>
+            No downloads yet. Paste a Facebook link to start your archive.
+          </p>
+        ) : recent.length > config.dashboard.marqueeAbove ? (
+          <Marquee items={recent} />
+        ) : (
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
+            {recent.map((job) => (
+              <VideoCard key={job.id} job={job} actions={false} />
+            ))}
+          </div>
+        )}
+      </section>
+    </main>
   )
 }
 

@@ -1,6 +1,6 @@
 import { LogIn } from 'lucide-react'
 import { useRef, useState } from 'react'
-import { muted } from '../../styles'
+import { label, muted, outlineButton, primaryButton } from '../../styles'
 
 function CodeForm({
   length,
@@ -41,7 +41,7 @@ function CodeForm({
         if (complete && !pending) onSubmit(digits.join(''))
       }}
     >
-      <p className={`text-xs uppercase tracking-widest ${muted}`}>Login code</p>
+      <p className={label}>Login code</p>
       <div
         className="mt-3 flex gap-3"
         onPaste={(e) => {
@@ -69,7 +69,7 @@ function CodeForm({
               } else if (e.key === 'ArrowLeft') inputs.current[i - 1]?.focus()
               else if (e.key === 'ArrowRight') inputs.current[i + 1]?.focus()
             }}
-            className="h-14 w-full min-w-0 border border-primary/30 bg-transparent text-center font-serif text-2xl tabular-nums focus:border-primary focus:outline-none dark:border-night-primary/30 dark:focus:border-night-primary"
+            className="h-14 w-full min-w-0 border border-primary/30 bg-transparent text-center font-serif text-2xl tabular-nums transition-colors focus:border-accent focus:outline-none focus-visible:outline-none dark:border-night-primary/30 dark:focus:border-night-accent"
           />
         ))}
       </div>
@@ -78,14 +78,14 @@ function CodeForm({
         <button
           type="button"
           onClick={onBack}
-          className={`border border-primary/30 px-6 py-2.5 text-sm hover:border-primary hover:text-primary dark:border-night-primary/30 dark:hover:border-night-primary dark:hover:text-night-primary ${muted}`}
+          className={`px-6 py-2.5 text-sm ${outlineButton}`}
         >
           Back
         </button>
         <button
           type="submit"
           disabled={!complete || pending}
-          className="flex flex-1 items-center justify-center gap-2 bg-primary px-6 py-2.5 text-sm text-background hover:bg-primary/90 disabled:opacity-40 dark:bg-night-primary dark:text-night-background dark:hover:bg-night-primary/90"
+          className={`flex flex-1 items-center justify-center gap-2 px-6 py-2.5 text-sm ${primaryButton}`}
         >
           <LogIn size={16} />
           {pending ? 'Logging in…' : 'Log in'}

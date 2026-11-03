@@ -1,6 +1,6 @@
 import { ArrowRight, Eye, EyeOff, KeyRound } from 'lucide-react'
 import { useState } from 'react'
-import { muted } from '../../styles'
+import { label, muted, primaryButton } from '../../styles'
 
 function PasswordForm({
   onSubmit,
@@ -20,10 +20,10 @@ function PasswordForm({
         onSubmit(password)
       }}
     >
-      <label htmlFor="password" className={`text-xs uppercase tracking-widest ${muted}`}>
+      <label htmlFor="password" className={label}>
         Password
       </label>
-      <div className="mt-3 flex items-center gap-2 border border-primary/30 px-3 focus-within:border-primary dark:border-night-primary/30 dark:focus-within:border-night-primary">
+      <div className="mt-3 flex items-center gap-2 border border-primary/30 px-3 transition-colors focus-within:border-primary dark:border-night-primary/30 dark:focus-within:border-night-primary">
         <KeyRound size={16} className={`shrink-0 ${muted}`} />
         <input
           id="password"
@@ -34,7 +34,7 @@ function PasswordForm({
           value={password}
           onChange={(e) => setPassword(e.target.value)}
           placeholder="Enter your password"
-          className="min-w-0 flex-1 bg-transparent py-2.5 text-sm placeholder:text-primary/40 focus:outline-none dark:placeholder:text-night-primary/40"
+          className="min-w-0 flex-1 bg-transparent py-3 text-sm placeholder:text-primary/40 focus:outline-none focus-visible:outline-none dark:placeholder:text-night-primary/40"
         />
         <button
           type="button"
@@ -49,7 +49,7 @@ function PasswordForm({
       <button
         type="submit"
         disabled={pending}
-        className="flex w-full items-center justify-center gap-2 bg-primary px-6 py-2.5 text-sm text-background hover:bg-primary/90 disabled:opacity-40 dark:bg-night-primary dark:text-night-background dark:hover:bg-night-primary/90"
+        className={`flex w-full items-center justify-center gap-2 px-6 py-3 text-sm ${primaryButton}`}
       >
         {pending ? 'Sending code…' : 'Continue'}
         <ArrowRight size={16} />

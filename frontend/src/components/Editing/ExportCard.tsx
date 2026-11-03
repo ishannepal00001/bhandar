@@ -3,6 +3,7 @@
 //   turns into a finished card when useExportEvents hears it finish. Save fetches a short-lived link and sends the
 //   browser to it (B2 serves it as an attachment, so the page stays put); Delete removes the video and the export. The
 //   hooks toast the outcome.
+// Actions: On devices that can hover they appear when the card is hovered or focused; on touch screens they always show.
 import { Ban, CircleAlert, CircleCheck, Download, LoaderCircle, Trash2 } from 'lucide-react'
 import { formatDuration } from '../../editor/format'
 import { exportsFacade } from '../../facades/exports'
@@ -41,7 +42,10 @@ const badges = {
 }
 
 const actionButton =
-  'bg-background p-1.5 disabled:opacity-40 text-primary/60 hover:text-primary dark:bg-night-background dark:text-night-primary/60 dark:hover:text-night-primary'
+  'bg-background p-2 disabled:opacity-40 text-primary/70 hover:bg-primary hover:text-background dark:bg-night-background dark:text-night-primary/70 dark:hover:bg-night-primary dark:hover:text-night-background'
+
+const actionBar =
+  'absolute right-2 top-2 flex gap-px transition-opacity [@media(hover:hover)]:opacity-0 [@media(hover:hover)]:group-hover:opacity-100 [@media(hover:hover)]:group-focus-within:opacity-100'
 
 function ExportCard({ item }: { item: Export }) {
   const title = exportTitle(item)
@@ -55,11 +59,11 @@ function ExportCard({ item }: { item: Export }) {
   const clipCount = `${item.clips.length} ${item.clips.length === 1 ? 'clip' : 'clips'}`
 
   return (
-    <div className={panel}>
+    <div className={`group transition-colors hover:border-primary/40 dark:hover:border-night-primary/40 ${panel}`}>
       <div className="relative">
         <Thumbnail src={finished?.thumbnail_url} className="aspect-video" />
         {finished && (
-          <div className="absolute right-2 top-2 flex gap-1">
+          <div className={actionBar}>
             {completed && (
               <button
                 type="button"
@@ -86,7 +90,7 @@ function ExportCard({ item }: { item: Export }) {
         )}
       </div>
       <div className="p-3">
-        <p className="truncate text-sm" title={title}>
+        <p className="truncate text-sm font-medium" title={title}>
           {title}
         </p>
         {item.caption && (
@@ -100,11 +104,11 @@ function ExportCard({ item }: { item: Export }) {
           </p>
         )}
         <div className="mt-2 flex items-center justify-between gap-2 text-xs">
-          <span className={`inline-flex items-center gap-1 border px-2 py-0.5 ${badge.className}`}>
+          <span className={`inline-flex shrink-0 items-center gap-1 border px-1.5 py-0.5 font-mono text-[10px] uppercase tracking-wider ${badge.className}`}>
             <BadgeIcon size={12} className={badge.iconClassName} />
             {badge.label}
           </span>
-          <span className={`truncate tabular-nums ${muted}`}>
+          <span className={`truncate font-mono text-[11px] tabular-nums ${muted}`}>
             {clipCount} · {formatDuration(exportSeconds(item))}
             {completed && ` · ${formatBytes(finished.filesize)}`} · {formatDate(item.created_at)}
           </span>

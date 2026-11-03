@@ -31,16 +31,16 @@ function Modal({
         type="button"
         aria-label="Close"
         onClick={onClose}
-        className="absolute inset-0 bg-primary/40 dark:bg-black/60"
+        className="absolute inset-0 animate-fade-in bg-primary/40 backdrop-blur-sm motion-reduce:animate-none dark:bg-black/60"
       />
       <div
         role="dialog"
         aria-modal="true"
         aria-labelledby="modal-title"
-        className="relative w-full max-w-2xl border border-primary/15 bg-background text-primary dark:border-night-primary/15 dark:bg-night-background dark:text-night-primary"
+        className="relative w-full max-w-2xl animate-fade-up border border-primary/15 border-t-accent bg-background shadow-2xl shadow-primary/20 [border-top-width:3px] motion-reduce:animate-none dark:border-t-night-accent dark:shadow-black/50 text-primary dark:border-night-primary/15 dark:bg-night-background dark:text-night-primary"
       >
         <div className="flex items-center justify-between border-b border-primary/15 px-5 py-4 dark:border-night-primary/15">
-          <h2 id="modal-title" className="font-serif text-xl">
+          <h2 id="modal-title" className="font-serif text-2xl">
             {title}
           </h2>
           <button

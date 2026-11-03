@@ -1,3 +1,4 @@
+// upcoming, Settings: Not built yet, so they're disabled and marked "Soon" instead of looking clickable.
 import { Link } from '@tanstack/react-router'
 import {
   ArrowLeft,
@@ -9,9 +10,11 @@ import {
   X,
 } from 'lucide-react'
 import { useEffect } from 'react'
+import Logo from './Logo'
 import { useMediaQuery } from '../hooks/useMediaQuery'
 import { useDownloadModalStore } from '../stores/useDownloadModalStore'
 import { useSidebarStore } from '../stores/useSidebarStore'
+import { kicker, muted, primaryButton } from '../styles'
 
 const links = [
   { to: '/', label: 'Dashboard', icon: LayoutDashboard },
@@ -25,6 +28,8 @@ const item =
   'flex items-center gap-3 border-l-2 text-sm transition-colors'
 const idle =
   'border-transparent text-primary/60 hover:border-primary/30 hover:text-primary dark:text-night-primary/60 dark:hover:border-night-primary/30 dark:hover:text-night-primary'
+const soon =
+  'ml-auto border border-primary/15 px-1.5 py-px font-mono text-[9px] uppercase tracking-wider dark:border-night-primary/15'
 const iconButton =
   'text-primary/60 hover:text-primary dark:text-night-primary/60 dark:hover:text-night-primary'
 
@@ -75,13 +80,14 @@ function Sidebar() {
       >
         <div className={`flex items-start py-6 ${collapsed ? 'justify-center' : 'justify-between px-5'}`}>
           {collapsed ? (
-            <p className="font-serif text-2xl font-bold">B</p>
+            <Logo size={28} />
           ) : (
-            <div>
-              <p className="font-serif text-3xl font-bold">Bhandar</p>
-              <p className="mt-1 text-[10px] uppercase tracking-[0.2em] text-accent dark:text-night-accent">
-                Facebook Video Downloader
-              </p>
+            <div className="flex items-center gap-3">
+              <Logo size={36} />
+              <div>
+                <p className="font-serif text-2xl font-semibold leading-none tracking-tight">Bhandar</p>
+                <p className={`mt-1.5 !text-[9px] ${kicker}`}>Video archive</p>
+              </div>
             </div>
           )}
           <button
@@ -117,11 +123,17 @@ function Sidebar() {
             <button
               key={label}
               type="button"
-              title={collapsed ? label : undefined}
-              className={`w-full text-left ${item} ${pad} ${idle}`}
+              disabled
+              title={`${label} (coming soon)`}
+              className={`w-full cursor-not-allowed text-left opacity-50 ${item} ${pad} border-transparent text-primary/60 dark:text-night-primary/60`}
             >
               <Icon size={18} />
-              {!collapsed && label}
+              {!collapsed && (
+                <>
+                  {label}
+                  <span className={soon}>Soon</span>
+                </>
+              )}
             </button>
           ))}
         </nav>
@@ -135,7 +147,7 @@ function Sidebar() {
             }}
             title={collapsed ? 'Download' : undefined}
             aria-label="Download"
-            className={`flex items-center justify-center gap-2 bg-primary text-sm text-background hover:bg-primary/90 dark:bg-night-primary dark:text-night-background dark:hover:bg-night-primary/90 ${
+            className={`flex items-center justify-center gap-2 text-sm ${primaryButton} ${
               collapsed ? 'p-2' : 'w-full px-4 py-2.5'
             }`}
           >
@@ -147,8 +159,9 @@ function Sidebar() {
         <div className={`flex items-center border-t border-primary/15 dark:border-night-primary/15 ${collapsed ? 'flex-col justify-center gap-3 py-3' : 'justify-between px-5 py-4'}`}>
           <button
             type="button"
-            title={collapsed ? 'Settings' : undefined}
-            className={`flex items-center gap-3 text-left text-sm ${iconButton}`}
+            disabled
+            title="Settings (coming soon)"
+            className={`flex cursor-not-allowed items-center gap-3 text-left text-sm opacity-50 ${muted}`}
           >
             <Settings size={18} />
             {!collapsed && 'Settings'}

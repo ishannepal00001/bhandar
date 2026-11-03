@@ -5,9 +5,10 @@ import { useState } from 'react'
 import CodeForm from '../components/Auth/CodeForm'
 import PasswordForm from '../components/Auth/PasswordForm'
 import Stepper from '../components/Auth/Stepper'
+import Logo from '../components/Logo'
 import { config } from '../config'
 import { authFacade } from '../facades/auth'
-import { muted } from '../styles'
+import { kicker, muted } from '../styles'
 
 const steps = ['Password', 'Code'] as const
 
@@ -25,9 +26,11 @@ function Auth() {
 
   return (
     <div className="flex min-h-screen items-center justify-center bg-background px-4 text-primary dark:bg-night-background dark:text-night-primary">
-      <main className="w-full max-w-sm space-y-8">
+      <main className="w-full max-w-sm animate-fade-up space-y-8 border border-primary/15 border-t-accent p-6 [border-top-width:3px] motion-reduce:animate-none sm:p-8 dark:border-night-primary/15 dark:border-t-night-accent">
         <div>
-          <h1 className="font-serif text-3xl">Bhandar</h1>
+          <Logo size={40} />
+          <p className={`mt-6 ${kicker}`}>Private archive</p>
+          <h1 className="mt-2 font-serif text-4xl font-medium tracking-tight">Bhandar</h1>
           <p className={`mt-1 text-sm ${muted}`}>
             {step === 0 ? 'Sign in with your password.' : 'Check your email for a login code.'}
           </p>

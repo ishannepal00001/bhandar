@@ -3,9 +3,10 @@
 import { Download, Link2 } from 'lucide-react'
 import { downloadsFacade } from '../../facades/downloads'
 import { useDownloadModalStore } from '../../stores/useDownloadModalStore'
+import { label, primaryButton } from '../../styles'
 
 const field =
-  'border border-primary/30 bg-transparent text-sm focus:border-primary focus:outline-none dark:border-night-primary/30 dark:focus:border-night-primary'
+  'border border-primary/30 bg-transparent text-sm transition-colors focus-within:border-primary dark:border-night-primary/30 dark:focus-within:border-night-primary'
 
 function DownloadForm() {
   const url = downloadsFacade.useDownloadStore((state) => state.url)
@@ -13,11 +14,8 @@ function DownloadForm() {
   const setModalOpen = useDownloadModalStore((state) => state.setOpen)
 
   return (
-    <section className="border border-primary/15 p-5 dark:border-night-primary/15">
-      <label
-        htmlFor="video-url"
-        className="text-xs uppercase tracking-widest text-primary/60 dark:text-night-primary/60"
-      >
+    <section className="border border-primary/15 border-l-accent p-5 [border-left-width:3px] dark:border-night-primary/15 dark:border-l-night-accent">
+      <label htmlFor="video-url" className={label}>
         Facebook video URL
       </label>
       <form
@@ -44,13 +42,13 @@ function DownloadForm() {
             value={url}
             onChange={(e) => downloadsFacade.setUrl(e.target.value)}
             placeholder="https://www.facebook.com/watch?v=…"
-            className="min-w-0 flex-1 bg-transparent py-2.5 placeholder:text-primary/40 focus:outline-none dark:placeholder:text-night-primary/40"
+            className="min-w-0 flex-1 bg-transparent py-3 placeholder:text-primary/40 focus:outline-none focus-visible:outline-none dark:placeholder:text-night-primary/40"
           />
         </div>
         <button
           type="submit"
           disabled={startDownload.isPending}
-          className="flex items-center justify-center gap-2 bg-primary px-6 py-2.5 text-sm text-background hover:bg-primary/90 disabled:opacity-40 dark:bg-night-primary dark:text-night-background dark:hover:bg-night-primary/90"
+          className={`flex items-center justify-center gap-2 px-6 py-3 text-sm ${primaryButton}`}
         >
           <Download size={16} />
           {startDownload.isPending ? 'Queuing…' : 'Download'}

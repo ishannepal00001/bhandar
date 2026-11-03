@@ -2,6 +2,7 @@
 import { Outlet } from '@tanstack/react-router'
 import { Menu } from 'lucide-react'
 import DownloadForm from './components/Downloads/DownloadForm'
+import Logo from './components/Logo'
 import Modal from './components/Modal'
 import Sidebar from './components/Sidebar'
 import { downloadsFacade } from './facades/downloads'
@@ -24,7 +25,10 @@ function Layout() {
       <div className="min-w-0 flex-1">
         {!errorShown && (
           <header className="sticky top-0 z-20 flex items-center justify-between border-b border-primary/15 bg-background px-4 py-3 md:hidden dark:border-night-primary/15 dark:bg-night-background">
-            <p className="font-serif text-xl font-bold">Bhandar</p>
+            <p className="flex items-center gap-2 font-serif text-xl font-semibold tracking-tight">
+              <Logo size={24} />
+              Bhandar
+            </p>
             <button
               type="button"
               onClick={() => setMobileOpen(true)}

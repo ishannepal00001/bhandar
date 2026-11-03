@@ -1,3 +1,29 @@
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
+
+@layer base {
+  body {
+    @apply bg-background font-sans text-primary antialiased dark:bg-night-background dark:text-night-primary;
+    font-feature-settings: 'ss01', 'tnum' 0;
+  }
+
+  ::selection {
+    @apply bg-accent text-background dark:bg-night-accent dark:text-night-background;
+  }
+
+  :focus-visible {
+    @apply outline outline-2 outline-offset-2 outline-accent dark:outline-night-accent;
+  }
+
+  * {
+    scrollbar-width: thin;
+    scrollbar-color: theme(colors.primary / 25%) transparent;
+  }
+
+  @media (prefers-color-scheme: dark) {
+    * {
+      scrollbar-color: theme(colors.night.primary / 25%) transparent;
+    }
+  }
+}

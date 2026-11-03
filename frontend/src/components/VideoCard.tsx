@@ -1,6 +1,7 @@
 // VideoCard: Save fetches a short-lived link and sends the browser to it; B2 serves it as an attachment, so it downloads
 //   without leaving the page (a new tab would be blocked as a popup, since it opens after an await). Delete removes the
 //   file and the job, and the lists refetch. The hooks toast the outcome.
+// Actions: On devices that can hover they appear when the card is hovered or focused; on touch screens they always show.
 import { Ban, CircleAlert, CircleCheck, Download, Trash2 } from 'lucide-react'
 import { downloadsFacade } from '../facades/downloads'
 import { muted, panel } from '../styles'
@@ -25,7 +26,10 @@ const badges = {
 }
 
 const actionButton =
-  'bg-background p-1.5 disabled:opacity-40 text-primary/60 hover:text-primary dark:bg-night-background dark:text-night-primary/60 dark:hover:text-night-primary'
+  'bg-background p-2 disabled:opacity-40 text-primary/70 hover:bg-primary hover:text-background dark:bg-night-background dark:text-night-primary/70 dark:hover:bg-night-primary dark:hover:text-night-background'
+
+const actionBar =
+  'absolute right-2 top-2 flex gap-px transition-opacity [@media(hover:hover)]:opacity-0 [@media(hover:hover)]:group-hover:opacity-100 [@media(hover:hover)]:group-focus-within:opacity-100'
 
 function VideoCard({
   job,
@@ -45,11 +49,11 @@ function VideoCard({
   const busy = downloadFile.isPending || deleteDownload.isPending
 
   return (
-    <div className={`${panel} ${className}`}>
+    <div className={`group transition-colors hover:border-primary/40 dark:hover:border-night-primary/40 ${panel} ${className}`}>
       <div className="relative">
         <Thumbnail src={job.thumbnail_url} className="aspect-video" />
         {actions && (
-          <div className="absolute right-2 top-2 flex gap-1">
+          <div className={actionBar}>
             {completed && (
               <button
                 type="button"
@@ -78,7 +82,7 @@ function VideoCard({
         )}
       </div>
       <div className="p-3">
-        <p className="truncate text-sm" title={title}>
+        <p className="truncate text-sm font-medium" title={title}>
           {title}
         </p>
         {job.error && (
@@ -87,11 +91,11 @@ function VideoCard({
           </p>
         )}
         <div className="mt-2 flex items-center justify-between gap-2 text-xs">
-          <span className={`inline-flex items-center gap-1 border px-2 py-0.5 ${badge.className}`}>
+          <span className={`inline-flex shrink-0 items-center gap-1 border px-1.5 py-0.5 font-mono text-[10px] uppercase tracking-wider ${badge.className}`}>
             <BadgeIcon size={12} />
             {statusLabels[job.status]}
           </span>
-          <span className={`tabular-nums ${muted}`}>
+          <span className={`truncate font-mono text-[11px] tabular-nums ${muted}`}>
             {completed && `${formatBytes(job.filesize)} · `}
             {formatDate(job.created_at)}
           </span>

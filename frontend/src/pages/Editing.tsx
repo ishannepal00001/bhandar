@@ -7,9 +7,10 @@ import { useEffect, useRef, useState } from 'react'
 import DownloadPicker from '../components/Editing/DownloadPicker'
 import ExportList from '../components/Editing/ExportList'
 import Modal from '../components/Modal'
+import PageHeader from '../components/PageHeader'
 import { Editor } from '../editor'
 import { clipsFacade } from '../facades/clips'
-import { muted } from '../styles'
+import { outlineButton, primaryButton } from '../styles'
 import { jobTitle } from '../utils/jobs'
 
 const button = 'flex items-center justify-center gap-2 px-4 py-2.5 text-sm'
@@ -26,7 +27,7 @@ function Editing() {
   }, [video])
 
   return (
-    <div className="min-h-screen bg-background text-primary dark:bg-night-background dark:text-night-primary">
+    <>
       <input
         ref={fileInput}
         type="file"
@@ -51,31 +52,28 @@ function Editing() {
         />
       )}
       {!src && (
-        <main className="mx-auto max-w-7xl space-y-10 px-4 py-10 sm:px-6 sm:py-14">
-          <div className="flex flex-col items-center text-center">
-            <h1 className="font-serif text-3xl sm:text-4xl">Editing</h1>
-            <p className={`mt-3 max-w-md text-sm ${muted}`}>
-              Trim and clip your videos. Start from something you’ve downloaded, or upload a video of your own.
-            </p>
-            <div className="mt-8 grid w-full max-w-sm gap-3 sm:w-auto sm:max-w-none sm:grid-cols-2">
-              <button
-                type="button"
-                onClick={() => setPickerOpen(true)}
-                className={`${button} bg-primary text-background hover:bg-primary/90 dark:bg-night-primary dark:text-night-background dark:hover:bg-night-primary/90`}
-              >
-                <Download size={16} />
-                Use downloads
-              </button>
-              <button
-                type="button"
-                onClick={() => fileInput.current?.click()}
-                className={`${button} border border-primary/30 hover:border-primary dark:border-night-primary/30 dark:hover:border-night-primary`}
-              >
-                <Upload size={16} />
-                Upload videos
-              </button>
-            </div>
-          </div>
+        <main className="mx-auto max-w-7xl animate-fade-up space-y-8 px-4 py-6 motion-reduce:animate-none sm:space-y-10 sm:px-6 sm:py-10">
+          <PageHeader
+            eyebrow="Studio"
+            title="Editing"
+            description="Trim and clip your videos. Start from something you’ve downloaded, or upload a video of your own."
+            actions={
+              <div className="grid w-full gap-3 sm:w-auto sm:grid-cols-2">
+                <button type="button" onClick={() => setPickerOpen(true)} className={`${button} ${primaryButton}`}>
+                  <Download size={16} />
+                  Use downloads
+                </button>
+                <button
+                  type="button"
+                  onClick={() => fileInput.current?.click()}
+                  className={`${button} ${outlineButton}`}
+                >
+                  <Upload size={16} />
+                  Upload videos
+                </button>
+              </div>
+            }
+          />
           <ExportList />
         </main>
       )}
@@ -88,7 +86,7 @@ function Editing() {
           }}
         />
       </Modal>
-    </div>
+    </>
   )
 }
 
