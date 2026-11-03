@@ -38,10 +38,11 @@
     "B2_ENDPOINT": "https://s3.us-east-005.backblazeb2.com",
     "B2_REGION": "us-east-005",
     "STORAGE_URL_TTL_SECONDS": 3600,
-    // The fetchr download service, the client id it knows us by, and how the DownloadTracker polls it.
+    // The fetchr download service, the client id it knows us by, and how the DownloadTracker polls it. The timeout covers
+    // fetchr waking from sleep (Render's free tier takes 30-60s).
     "DOWNLOADER_URL": "http://127.0.0.1:8000",
     "DOWNLOADER_CLIENT_ID": "my-client",
-    "DOWNLOADER_TIMEOUT_SECONDS": 15,
+    "DOWNLOADER_TIMEOUT_SECONDS": 60,
     "DOWNLOAD_POLL_SECONDS": 8,
     "DOWNLOAD_MAX_POLL_FAILURES": 15,
     "DOWNLOAD_TRACKER_NAME": "downloads",

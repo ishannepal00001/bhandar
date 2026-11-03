@@ -6,7 +6,10 @@
 // Fetchr.send(): DOWNLOADER_SEED_CODE is only used until the first rotation. fetchr rotates the code on every
 //   request it authenticates, errors included; the header is missing on a 401, where the code was rejected and
 //   didn't rotate. With no reply there's no new code, so the old one is sent again and fetchr accepts it once within
-//   its grace window.
+//   its grace window. A 401 to a stored code means fetchr lost its database (it's recreated on every restart on
+//   Render) and re-seeded the client, so the request is sent once more with the seed code. That can't widen access:
+//   fetchr only accepts the seed while its database holds nothing newer.
+// Fetchr.attempt(): One request with the given code; a 401 doesn't carry a next code, so it only returns the response.
 
 import type { z } from "zod";
 import type { FetchrCodeStore, FetchrEnv } from "./fetchr.types";
@@ -53,23 +56,10 @@ export class Fetchr {
     init: RequestInit,
     schema: z.ZodType<T>,
   ): Promise<T> {
-    const code = this.codes.get() ?? this.seedCode;
-
-    let res: Response;
-    try {
-      res = await fetch(new URL(path, this.base), {
-        ...init,
-        headers: {
-          "X-Client-Id": this.clientId,
-          "X-Fetchr-Code": code,
-          "Content-Type": "application/json",
-        },
-        signal: AbortSignal.timeout(this.timeoutMs),
-      });
-    } catch (err) {
-      throw new FetchrError("Download service is unreachable", undefined, {
-        cause: err,
-      });
+    const stored = this.codes.get();
+    let res = await this.attempt(path, init, stored ?? this.seedCode);
+    if (res.status === 401 && stored !== undefined && stored !== this.seedCode) {
+      res = await this.attempt(path, init, this.seedCode);
     }
 
     const nextCode = res.headers.get("X-Fetchr-Next-Code");
@@ -92,5 +82,27 @@ export class Fetchr {
       );
     }
     return parsed.data;
+  }
+
+  private async attempt(
+    path: string,
+    init: RequestInit,
+    code: string,
+  ): Promise<Response> {
+    try {
+      return await fetch(new URL(path, this.base), {
+        ...init,
+        headers: {
+          "X-Client-Id": this.clientId,
+          "X-Fetchr-Code": code,
+          "Content-Type": "application/json",
+        },
+        signal: AbortSignal.timeout(this.timeoutMs),
+      });
+    } catch (err) {
+      throw new FetchrError("Download service is unreachable", undefined, {
+        cause: err,
+      });
+    }
   }
 }

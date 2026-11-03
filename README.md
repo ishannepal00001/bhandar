@@ -299,7 +299,8 @@ Requests are authenticated with a rolling code:
 
 - Every request sends `X-Client-Id: <DOWNLOADER_CLIENT_ID>` and `X-Fetchr-Code: <current code>`.
 - Every authenticated reply, errors included, carries `X-Fetchr-Next-Code`. The tracker stores it in its own storage, so it survives restarts, and sends it on the next request.
-- `DOWNLOADER_SEED_CODE` is used only before the first rotation.
+- `DOWNLOADER_SEED_CODE` is used before the first rotation, and again after fetchr restarts: on Render its database is recreated on every start, so it only knows the seed. A 401 to the stored code makes the client resend the request once with the seed. That can't widen access, since fetchr accepts the seed only while it has nothing newer.
+- `DOWNLOADER_TIMEOUT_SECONDS` (60) covers fetchr waking from sleep, which takes 30-60s on Render's free tier.
 
 The Worker uses two endpoints: `POST /api/v1/downloads` to queue a link and `GET /api/v1/downloads/{id}` to poll one. The full contract, including the response shape, is in [backend/API.md](backend/API.md#upstream-fetchr).
 

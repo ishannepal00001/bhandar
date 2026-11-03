@@ -238,7 +238,7 @@ Errors:
 | 401 / 500 | see `isUser` above | |
 | 429 | `10 downloads are already queued, wait for one to finish` | `DOWNLOAD_MAX_QUEUED` jobs are queued or starting (the number is the configured cap) |
 | 502 | `Download service is not configured` | `DOWNLOADER_URL`, `DOWNLOADER_CLIENT_ID` or `DOWNLOADER_SEED_CODE` is empty |
-| 502 | `Download service is unreachable` | Network error or no reply within `DOWNLOADER_TIMEOUT_SECONDS` (15) |
+| 502 | `Download service is unreachable` | Network error or no reply within `DOWNLOADER_TIMEOUT_SECONDS` (60) |
 | 502 | `Download service answered <status>` | fetchr returned a non-2xx status |
 | 502 | `Download service sent no next code` / `Download service sent an unexpected response` | fetchr's reply broke the [contract](#upstream-fetchr) |
 
