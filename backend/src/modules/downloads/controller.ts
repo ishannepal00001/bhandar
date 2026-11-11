@@ -53,6 +53,10 @@ export function fileLink(userId: number, id: string): Promise<FileLinkResult> {
   return fromService(() => downloadsService.fileLink(userId, id))
 }
 
+export function file(userId: number, id: string, range: string | null): Promise<Response> {
+  return fromService(() => downloadsService.file(userId, id, range))
+}
+
 export function remove(userId: number, id: string): Promise<DeleteResult> {
   return fromService(() => downloadsService.remove(userId, id))
 }

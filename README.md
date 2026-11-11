@@ -70,7 +70,7 @@ This README covers the whole project: how the backend and frontend are built, ho
    └── /health              ──► D1 round trip
 ```
 
-The Worker never touches video bytes. fetchr downloads the video and uploads it to Backblaze B2 itself. The Worker only tracks job status and hands the browser short-lived signed links to the files.
+The Worker never touches video bytes: fetchr downloads the video and uploads it to Backblaze B2 itself. The Worker tracks job status, hands the editor short-lived signed links for playback, and streams saves through itself so phones download them reliably.
 
 ## Stack
 
@@ -319,7 +319,7 @@ The Worker uses two endpoints: `POST /api/v1/downloads` to queue a link and `GET
 
 ### Storage
 
-`core/utils/storage.ts` exports a `Storage` class that talks to Backblaze B2's S3-compatible API with aws4fetch, using `B2_KEY_ID` and `B2_APP_KEY`. It can `upload`, `getFiles` (list), `getFile` (a presigned link with an optional download name) and `deleteFile`. The downloads module uses `getFile` and `deleteFile`; uploads are done by fetchr.
+`core/utils/storage.ts` exports a `Storage` class that talks to Backblaze B2's S3-compatible API with aws4fetch, using `B2_KEY_ID` and `B2_APP_KEY`. It can `upload`, `getFiles` (list), `getFile` (a presigned link with an optional download name), `downloadFile` (streams the file back with an attachment header) and `deleteFile`. The downloads module uses `getFile`, `downloadFile` and `deleteFile`; uploads are done by fetchr.
 
 ### API summary
 

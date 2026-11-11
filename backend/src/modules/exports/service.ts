@@ -5,6 +5,8 @@
 // source(): An upload's title is its file name without the extension.
 // list(): Queued exports first, then finished ones, each with a signed thumbnail link.
 // events(): The tracker's SSE stream, asking for the exports one.
+// file(): The rendered video, streamed from this origin as an attachment, so phones save it even when a direct B2
+//   link would be opened or blocked (iOS Safari).
 // remove(): Removes the B2 video and thumbnail (if any) before the row, so a failed delete can be retried. An upload
 //   belongs to the exports made from it, so deleting its last one, finished or queued, deletes the upload too.
 // saveAs(): The name the browser saves the file under: the source's title (or "clip"), then EXPORT_FILE_SUFFIX and
@@ -109,6 +111,14 @@ export async function fileLink(userId: number, id: string): Promise<FileLinkResu
   if (item.status !== 'completed' || !filename) throw new ExportsServiceError('Export has no file', 'NOT_COMPLETED')
   const file = await fromStorage(() => new Storage(env).getFile(filename, saveAs(item)))
   return { url: file.url }
+}
+
+export async function file(userId: number, id: string, range: string | null): Promise<Response> {
+  const item = await fromModel(() => exportsModel.findExport(userId, id))
+  if (!item) throw new ExportsServiceError('Export not found', 'NOT_FOUND')
+  const { filename } = item
+  if (item.status !== 'completed' || !filename) throw new ExportsServiceError('Export has no file', 'NOT_COMPLETED')
+  return fromStorage(() => new Storage(env).downloadFile(filename, saveAs(item), range))
 }
 
 export async function remove(userId: number, id: string): Promise<DeleteResult> {

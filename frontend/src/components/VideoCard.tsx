@@ -1,9 +1,10 @@
-// VideoCard: Save fetches a short-lived link and sends the browser to it; B2 serves it as an attachment, so it downloads
-//   without leaving the page (a new tab would be blocked as a popup, since it opens after an await). Delete removes the
-//   file and the job, and the lists refetch. The hooks toast the outcome.
+// VideoCard: Save goes straight to this origin's /downloads/:id/download, which streams the B2 file with an attachment
+//   header. A direct B2 link fails on iOS Safari, and a JSON round-trip first would put an await before the navigation.
+//   Delete removes the file and the job, and the lists refetch. The hooks toast the outcome.
 // Actions: On devices that can hover they appear when the card is hovered or focused; on touch screens they always show.
 import { Ban, CircleAlert, CircleCheck, Download, Trash2 } from 'lucide-react'
 import { downloadsFacade } from '../facades/downloads'
+import { apiUrl } from '../hooks/request'
 import { muted, panel } from '../styles'
 import type { FinishedJob } from '../types/downloads'
 import Thumbnail from './Thumbnail'
@@ -44,9 +45,8 @@ function VideoCard({
   const badge = badges[job.status]
   const BadgeIcon = badge.icon
   const completed = job.status === 'completed'
-  const downloadFile = downloadsFacade.useDownloadFile()
   const deleteDownload = downloadsFacade.useDeleteDownload()
-  const busy = downloadFile.isPending || deleteDownload.isPending
+  const busy = deleteDownload.isPending
 
   return (
     <div className={`group transition-colors hover:border-primary/40 dark:hover:border-night-primary/40 ${panel} ${className}`}>
@@ -60,9 +60,7 @@ function VideoCard({
                 aria-label="Save video"
                 title="Save video"
                 disabled={busy}
-                onClick={() =>
-                  downloadFile.mutate(job.id, { onSuccess: ({ url }) => window.location.assign(url) })
-                }
+                onClick={() => window.location.assign(apiUrl(`/downloads/${encodeURIComponent(job.id)}/download`))}
                 className={actionButton}
               >
                 <Download size={16} />

@@ -40,6 +40,10 @@ exportsRouter.get('/:id/file', async (c) =>
   c.json(await fromController(() => exportsController.fileLink(c.var.user.id, c.req.param('id')))),
 )
 
+exportsRouter.get('/:id/download', async (c) =>
+  fromController(() => exportsController.file(c.var.user.id, c.req.param('id'), c.req.header('Range') ?? null)),
+)
+
 exportsRouter.delete('/:id', async (c) =>
   c.json(await fromController(() => exportsController.remove(c.var.user.id, c.req.param('id')))),
 )

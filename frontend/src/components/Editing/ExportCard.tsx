@@ -1,12 +1,13 @@
 // ExportCard: One export: its thumbnail, the source's title, the caption's headline, how many clips and how long the
 //   video is, and its status. A queued export is still rendering on fetchr, shown with a spinner and no actions; it
-//   turns into a finished card when useExportEvents hears it finish. Save fetches a short-lived link and sends the
-//   browser to it (B2 serves it as an attachment, so the page stays put); Delete removes the video and the export. The
-//   hooks toast the outcome.
+//   turns into a finished card when useExportEvents hears it finish. Save goes straight to this origin's
+//   /exports/:id/download, which streams the B2 file with an attachment header (a direct B2 link fails on iOS Safari).
+//   Delete removes the video and the export. The hooks toast the outcome.
 // Actions: On devices that can hover they appear when the card is hovered or focused; on touch screens they always show.
 import { Ban, CircleAlert, CircleCheck, Download, LoaderCircle, Trash2 } from 'lucide-react'
 import { formatDuration } from '../../editor/format'
 import { exportsFacade } from '../../facades/exports'
+import { apiUrl } from '../../hooks/request'
 import { muted, panel } from '../../styles'
 import type { Export } from '../../types/exports'
 import { exportSeconds, exportTitle } from '../../utils/exports'
@@ -53,9 +54,8 @@ function ExportCard({ item }: { item: Export }) {
   const BadgeIcon = badge.icon
   const finished = item.status === 'queued' ? null : item
   const completed = finished?.status === 'completed'
-  const exportFile = exportsFacade.useExportFile()
   const deleteExport = exportsFacade.useDeleteExport()
-  const busy = exportFile.isPending || deleteExport.isPending
+  const busy = deleteExport.isPending
   const clipCount = `${item.clips.length} ${item.clips.length === 1 ? 'clip' : 'clips'}`
 
   return (
@@ -70,7 +70,7 @@ function ExportCard({ item }: { item: Export }) {
                 aria-label="Save video"
                 title="Save video"
                 disabled={busy}
-                onClick={() => exportFile.mutate(finished.id, { onSuccess: ({ url }) => window.location.assign(url) })}
+                onClick={() => window.location.assign(apiUrl(`/exports/${encodeURIComponent(finished.id)}/download`))}
                 className={actionButton}
               >
                 <Download size={16} />

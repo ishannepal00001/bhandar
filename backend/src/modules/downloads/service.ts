@@ -2,6 +2,9 @@
 // start(): Hands the link to the tracker, which queues it on fetchr; the result arrives later over SSE.
 // list(): Finished jobs carry a signed thumbnail link.
 // remove(): Removes the B2 video and thumbnail (if any) before the row, so a failed delete can be retried.
+// fileLink(): The link the editor plays the video from.
+// file(): The video itself, streamed from this origin as an attachment, so phones save it even when a direct B2
+//   link would be opened or blocked (iOS Safari).
 // saveAs(): The name the browser saves the file under: the title, or the key's file name without its extension, ending
 //   in DOWNLOAD_FILE_EXTENSION.
 import { env } from 'cloudflare:workers'
@@ -77,6 +80,11 @@ export async function fileLink(userId: number, id: string): Promise<FileLinkResu
   const download = await findCompleted(userId, id)
   const file = await fromStorage(() => new Storage(env).getFile(download.filename, saveAs(download)))
   return { url: file.url }
+}
+
+export async function file(userId: number, id: string, range: string | null): Promise<Response> {
+  const download = await findCompleted(userId, id)
+  return fromStorage(() => new Storage(env).downloadFile(download.filename, saveAs(download), range))
 }
 
 export async function remove(userId: number, id: string): Promise<DeleteResult> {

@@ -40,6 +40,10 @@ downloadsRouter.get('/:id/file', async (c) =>
   c.json(await fromController(() => downloadsController.fileLink(c.var.user.id, c.req.param('id')))),
 )
 
+downloadsRouter.get('/:id/download', async (c) =>
+  fromController(() => downloadsController.file(c.var.user.id, c.req.param('id'), c.req.header('Range') ?? null)),
+)
+
 downloadsRouter.delete('/:id', async (c) =>
   c.json(await fromController(() => downloadsController.remove(c.var.user.id, c.req.param('id')))),
 )

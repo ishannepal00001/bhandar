@@ -191,7 +191,7 @@ Every route here runs the `isUser` middleware first, and only sees the logged-in
 | 401 | `Invalid or expired session` | Token is malformed, tampered with, or expired |
 | 500 | `JWT secret is not configured` | `JWT_SECRET` is missing |
 
-The flow: `POST /downloads` returns a queued job right away. The `DownloadTracker` polls fetchr every `DOWNLOAD_POLL_SECONDS` (8). When the job finishes, the tracker stores it in D1 and pushes it to `GET /downloads/events`. Then `GET /downloads/:id/file` gives a link to the video.
+The flow: `POST /downloads` returns a queued job right away. The `DownloadTracker` polls fetchr every `DOWNLOAD_POLL_SECONDS` (8). When the job finishes, the tracker stores it in D1 and pushes it to `GET /downloads/events`. Then `GET /downloads/:id/file` gives a link for the editor, and `GET /downloads/:id/download` streams the file for saving.
 
 **Queue cap.** At most `DOWNLOAD_MAX_QUEUED` (10) downloads can be queued at once. Jobs whose fetchr call hasn't returned yet count too, so two requests sent together can't both take the last slot. Past the cap, `POST /downloads` returns `429` until a job finishes. Each alarm also polls at most `DOWNLOAD_MAX_QUEUED` jobs, oldest first, so one run stays under the 50 subrequests a Workers Free invocation may make. Keep the value below 50.
 
@@ -377,6 +377,14 @@ Errors:
 | 500 | `Failed to look up download` | D1 error |
 | 502 | `Storage is not configured` / `Storage is unreachable` / `Lookup failed with <status>` | B2 error |
 
+### `GET /api/v1/downloads/:id/download`
+
+The video itself, streamed through the Worker with `Content-Disposition: attachment`. This is what the Save button opens. A direct B2 link is cross-site, and iOS Safari either previews it or refuses to save it; this route is same-origin and carries both `filename` and `filename*`, so every browser downloads it. The signed B2 link is made and fetched server-side, so it never reaches the browser. A `Range` header is forwarded and the `206`, `Content-Range` and `Accept-Ranges` are passed back, so seeking and resumable downloads still work.
+
+Path params: `id`, the job id. Response `200` (or `206` for a range): the file bytes, `Content-Type` from B2, and `Content-Disposition: attachment; filename="…"; filename*=UTF-8''…`.
+
+Errors: the same as `GET /api/v1/downloads/:id/file`.
+
 ### `DELETE /api/v1/downloads/:id`
 
 Deletes a finished download. It removes the B2 video and thumbnail first, if there are any, and then the D1 row, so a delete that fails partway can just be retried.
@@ -402,7 +410,7 @@ Errors:
 
 Clip exports: clips cut from one of the user's completed downloads or ready [uploads](#uploads), joined in order into **one MP4** by fetchr, with the editor's caption burned in. Every route runs `isUser` first, with the same `401`/`500` errors as the downloads routes, and only sees the logged-in user's exports.
 
-The flow mirrors downloads. `POST /exports` returns a queued export right away. The same `DownloadTracker` polls fetchr on the same alarm. It has to be the same object, because fetchr's rolling code is shared by every request the Worker makes. When the render finishes, the tracker stores it in D1 (`exports`, `migrations/0005_exports.sql`) and pushes it to `GET /exports/events`. Then `GET /exports/:id/file` gives a link to the video.
+The flow mirrors downloads. `POST /exports` returns a queued export right away. The same `DownloadTracker` polls fetchr on the same alarm. It has to be the same object, because fetchr's rolling code is shared by every request the Worker makes. When the render finishes, the tracker stores it in D1 (`exports`, `migrations/0005_exports.sql`) and pushes it to `GET /exports/events`. Then `GET /exports/:id/download` streams the video for saving.
 
 **Queue cap.** At most `EXPORT_MAX_QUEUED` (3) exports can be queued at once, counted like downloads. Past the cap, `POST /exports` returns `429`. Each alarm polls at most `DOWNLOAD_MAX_QUEUED` downloads plus `EXPORT_MAX_QUEUED` exports, so keep their sum under 50.
 
@@ -484,6 +492,10 @@ The same SSE stream as `GET /downloads/events`, but for exports: `: connected`, 
 A presigned B2 link to a completed export, valid `STORAGE_URL_TTL_SECONDS`. It saves as the source's title plus `EXPORT_FILE_SUFFIX` and `DOWNLOAD_FILE_EXTENSION`, e.g. `Some video (clip).mp4` (`clip (clip).mp4` without a title). Response `200`: `{ "url": string }`.
 
 Errors: `404 Export not found` (also for a queued export), `404 File not found` (gone from B2), `409 Export has no file` (failed or cancelled), `500 Failed to look up export`, `502` for B2 errors.
+
+### `GET /api/v1/exports/:id/download`
+
+The rendered video, streamed through the Worker with `Content-Disposition: attachment`, like `GET /api/v1/downloads/:id/download`. It saves as the source's title plus `EXPORT_FILE_SUFFIX` and `DOWNLOAD_FILE_EXTENSION`, e.g. `Some video (clip).mp4` (`clip (clip).mp4` without a title). Same path params, range support, and errors as that route.
 
 ### `DELETE /api/v1/exports/:id`
 

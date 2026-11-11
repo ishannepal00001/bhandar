@@ -3,6 +3,8 @@
 // Storage.upload(): Streams need `size`, since B2 rejects uploads without a Content-Length.
 // Storage.getFile(): Returns the file's metadata and a short-lived download link. Pass `filename` to make the
 //   browser save it.
+// Storage.downloadFile(): Streams the file through this Worker with an attachment header, for browsers (iOS Safari)
+//   that won't save a cross-origin B2 link. It forwards a Range header, so video seeking still works.
 // Storage.signUploadUrl(): A presigned PUT for the browser to send a file straight to B2, valid ttlSeconds. The
 //   Content-Type is signed, so the browser has to send exactly that header. The bucket's CORS rules must allow PUT
 //   from the frontend's origin.
@@ -10,6 +12,8 @@
 //   the file exists.
 // encodeFilename(): RFC 5987 percent-encoding for filename*. encodeURIComponent leaves ! ' ( ) * as they are, which
 //   that grammar doesn't allow, and B2 rejects the link (a title like "Video (clip)" fails), so those are encoded too.
+// contentDisposition(): Sends both filename (an ASCII fallback) and filename*. Safari uses only filename, while Chrome
+//   and Firefox prefer filename*, so one header works everywhere.
 // encodeKey(): Encodes each segment so the slashes in a key like downloads/<client>/<id>/<file> stay path
 //   separators.
 import { AwsClient } from 'aws4fetch'
@@ -98,6 +102,28 @@ export class Storage {
     return presigned.url
   }
 
+  async downloadFile(id: string, filename: string, range: string | null): Promise<Response> {
+    const url = await this.signUrl(id, filename)
+
+    let res: Response
+    try {
+      res = await fetch(url, { headers: range ? { Range: range } : undefined })
+    } catch (err) {
+      throw new StorageError('Storage is unreachable', 500, { cause: err })
+    }
+    if (res.status === 404) throw new StorageError('File not found', 404)
+    if (!res.ok && res.status !== 206) throw new StorageError(`Download failed with ${res.status}`)
+
+    const headers = new Headers()
+    for (const name of ['accept-ranges', 'content-length', 'content-range', 'content-type', 'etag', 'last-modified']) {
+      const value = res.headers.get(name)
+      if (value) headers.set(name, value)
+    }
+    headers.set('cache-control', 'private, no-store')
+    headers.set('content-disposition', contentDisposition(filename))
+    return new Response(res.body, { status: res.status, headers })
+  }
+
   async signUploadUrl(id: string, contentType: string, ttlSeconds: number): Promise<string> {
     const signed = new URL(`${this.base}/${encodeKey(id)}`)
     signed.searchParams.set('X-Amz-Expires', String(ttlSeconds))
@@ -129,6 +155,13 @@ function xmlValue(xml: string, tag: string): string | undefined {
 
 function encodeFilename(filename: string): string {
   return encodeURIComponent(filename).replace(/[!'()*]/g, (c) => `%${c.charCodeAt(0).toString(16).toUpperCase()}`)
+}
+
+function contentDisposition(filename: string): string {
+  const fallback = filename
+    .replace(/[^\x20-\x7E]/g, '_')
+    .replace(/["\\%/:]/g, '_')
+  return `attachment; filename="${fallback}"; filename*=UTF-8''${encodeFilename(filename)}`
 }
 
 function encodeKey(key: string): string {
