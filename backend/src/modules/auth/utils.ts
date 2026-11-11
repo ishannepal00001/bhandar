@@ -11,6 +11,7 @@
 // verifyToken(): Returns undefined for a bad, tampered or expired token; throws only when the secret is missing.
 // sendOtpMail(): On port 465 it opens the TLS socket itself by hostname. Nodemailer would resolve the host to an IP
 //   first, and Workers checks the certificate against the address it connects to, so Gmail's cert fails on its IP.
+//   It takes every recipient, so one login code can go to the owner and anyone else who needs it (OTP_RECIPIENTS).
 //   The code leads the subject, so phones and Gmail show it (and offer their own copy button) in the notification.
 // otpMailHtml(): The app's look in what mail clients render: tables, inline styles, its three colours, square corners
 //   and fonts that fall back to Georgia and the system monospace. Mail clients run no script, so the code can't be
@@ -32,7 +33,7 @@ export function generateOtp(): string {
   return randomInt(0, 10 ** length).toString().padStart(length, '0')
 }
 
-export async function sendOtpMail(to: string, code: string, frontend: string | null): Promise<void> {
+export async function sendOtpMail(to: string[], code: string, frontend: string | null): Promise<void> {
   const { SMTP_HOST: host, SMTP_PORT: port, SMTP_USER: user, SMTP_PASS: pass, MAIL_FROM: from } = env
   if (!host || !user || !pass || !from) throw new AuthUtilsError('Mail is not configured')
 

@@ -1,5 +1,6 @@
-// api.baseUrl: The Worker's origin. Empty in dev (import.meta.env.DEV, set by Vite itself), where Vite proxies /api to
-//   it; the deployed Worker's URL in a production build, since the frontend is on another site.
+// api.baseUrl: Always empty: dev Vite proxies /api to the Worker, and in production functions/api/[[path]].ts does.
+//   Keeping the API on this origin makes the auth cookie first-party, so browsers that block third-party cookies
+//   (Brave, Safari, Firefox) still keep the session.
 // cache.maxAgeMs: How long saved responses are restored after a reload; older ones are dropped and refetched.
 // dashboard.marqueeAbove: Recent downloads scroll in a marquee only when there are more than this; fewer sit still in
 //   a grid, since a marquee of one or two cards just repeats them.
@@ -11,7 +12,7 @@
 // uploads.maxBytes: The largest video that can be uploaded to export from; mirrors the Worker's UPLOAD_MAX_BYTES.
 export const config = {
   api: {
-    baseUrl: import.meta.env.DEV ? '' : 'https://bhandar-backend.ishannepal00001.workers.dev',
+    baseUrl: '',
   },
   cache: {
     storageKey: 'bhandar-cache',

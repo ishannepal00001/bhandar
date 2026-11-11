@@ -1,7 +1,7 @@
 // Entry point: mounts api/v1 routers
-// cors(), csrf(): The frontend is on another site, so only the FRONTEND_ORIGINS may call /api with the cookie. Both run
-//   before the rate limiter so preflights aren't counted and its 429s carry CORS headers. csrf() rejects form-style
-//   requests from any other origin, which CORS alone doesn't stop.
+// cors(), csrf(): The browser reaches /api through a proxy on the frontend's origin, so only FRONTEND_ORIGINS may
+//   call it. Both run before the rate limiter so preflights aren't counted and its 429s carry CORS headers. csrf()
+//   rejects form-style requests from any other origin, which CORS alone doesn't stop.
 // GET /health: Liveness plus a D1 round trip; outside /api so it isn't rate limited.
 // default: Hono serves fetch; scheduled() is the daily cron (wrangler.jsonc triggers), which deletes uploads that were
 //   never exported.

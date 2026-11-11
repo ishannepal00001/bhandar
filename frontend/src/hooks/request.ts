@@ -1,6 +1,7 @@
 // hooks: the one fetch wrapper every hook calls
 // apiUrl(): Also used for the EventSource, which can't go through fetch.
-// request(): Always sends the cookie, since the frontend and the Worker are on different sites. Every non-GET is sent
+// request(): Always sends the cookie; /api is proxied through this origin (Vite in dev, a Pages Function in
+//   production), so the cookie is first-party. Every non-GET is sent
 //   as JSON, even with no body, so it never looks like a form post to the backend's CSRF check. A non-JSON error body
 //   (e.g. the CSRF 403) falls back to the status text. Every failure becomes an ApiError with a message a person can
 //   act on: no answer at all (offline, server down) is status 0, and a success that isn't JSON (e.g. an HTML page from

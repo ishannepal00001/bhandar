@@ -52,8 +52,8 @@ This README covers the whole project: how the backend and frontend are built, ho
 
 ```
  Browser (React SPA)
-   │  cross-site in production (CORS + CSRF allow only FRONTEND_ORIGINS);
-   │  same origin in dev, where /api is proxied to :8787
+   │  /api is always same-origin: Vite proxies it in dev, a Pages Function in production
+   │  (CORS + CSRF still allow only FRONTEND_ORIGINS)
    │  cookie: bhandar_token (httpOnly, Secure, SameSite=None)
    ▼
  Cloudflare Worker (Hono)
@@ -182,13 +182,23 @@ bun run deploy
 
 `bun run deploy` runs `backend/deploy.ts` rather than plain `wrangler deploy`. The secrets named in its package.json script are taken out of `vars` and uploaded as encrypted Worker secrets in the same deploy, so they never show in the Cloudflare dashboard or the deploy log. Locally they stay in `wrangler.jsonc` `vars`, where `wrangler dev` reads them.
 
+### Deploying the frontend
+
+```sh
+cd frontend
+bun run build
+bunx wrangler pages deploy dist --project-name bhandar-322
+```
+
+`wrangler pages deploy` uploads `functions/` from this directory together with `dist/`. The `/api` Function there forwards requests to the Worker, so the browser only ever talks to the Pages origin and the login cookie is first-party. Update the Worker URL in `functions/api/[[path]].ts` if the backend is deployed elsewhere.
+
 ## Configuration
 
 All configuration, secrets included, is in `backend/wrangler.jsonc`. That file is gitignored; `backend/wrangler.jsonc.example` is the committed template with the personal values and secrets blank. There is no `config.ts`, no `.env`, no `.dev.vars` and no `process.env`. Code reads config from the Worker bindings, either `import { env } from 'cloudflare:workers'` or `c.env` (for example `new Storage(c.env)`). Vars hold real JSON types (numbers, booleans). `wrangler dev` regenerates `worker-configuration.d.ts` whenever `wrangler.jsonc` changes (`dev.generate_types`). It's gitignored too, because it's generated from the file that holds the secrets; run `bun run cf-typegen` on a fresh clone.
 
 | Where | Keys | Purpose |
 |---|---|---|
-| `vars` | `OTP_LENGTH`, `OTP_TTL_MINUTES`, `OTP_MAIL_SUBJECT` | Login codes: number of digits, lifetime and email subject (sent after the code, e.g. `482913 · Your Bhandar login code`) |
+| `vars` | `OTP_LENGTH`, `OTP_TTL_MINUTES`, `OTP_MAIL_SUBJECT`, `OTP_RECIPIENTS` | Login codes: number of digits, lifetime, email subject (sent after the code, e.g. `482913 · Your Bhandar login code`), and who receives it (`[]` means the seeded user's email) |
 | `vars` | `PASSWORD_MIN_LENGTH`, `PASSWORD_SALT_BYTES` | Password rule and salt size |
 | `vars` | `JWT_ALGORITHM`, `JWT_TTL_DAYS` | Login token signing and lifetime |
 | `vars` | `COOKIE_NAME`, `COOKIE_SECURE`, `COOKIE_SAME_SITE` | The auth cookie |
@@ -257,8 +267,8 @@ Queued jobs aren't in D1. They live in the DownloadTracker's own SQLite storage 
 
 ### How login works
 
-1. **`POST /api/v1/auth/send-otp`** with `{ password }`. The controller checks it against the password rule: at least `PASSWORD_MIN_LENGTH` (8) characters, with an uppercase letter, a lowercase letter, a number and a symbol. The service hashes it with PBKDF2-SHA256 and each user's salt and compares in constant time. On a match, it generates an `OTP_LENGTH` (6) digit code, replaces any earlier code of that user with its SHA-256 hash with an expiry of `OTP_TTL_MINUTES` (10), and emails the code through Nodemailer. The mail is in the app's colours, with the code large and selectable in one tap. When the request's `Origin` is one of `FRONTEND_ORIGINS`, it also has a **Sign in with this code** button that opens `<origin>/auth#code=<code>`; the sign-in page fills the code in from the fragment (never sent to a server) and wipes it from the address bar.
-2. **`POST /api/v1/auth/login`** with `{ code }`. The service looks up the hashed code, checks it hasn't expired, and signs an `HS256` JWT with `{ sub, name }` valid for `JWT_TTL_DAYS` (7). A wrong code counts against the live code, which is deleted after `OTP_MAX_ATTEMPTS` (5) wrong tries, so a new one needs the password again. A right code is deleted only after the token is signed. The response sets the `bhandar_token` cookie (`HttpOnly`, `Secure`, `SameSite=None`, since the frontend is on another site) and also returns the token in the body for clients without cookies.
+1. **`POST /api/v1/auth/send-otp`** with `{ password }`. The controller checks it against the password rule: at least `PASSWORD_MIN_LENGTH` (8) characters, with an uppercase letter, a lowercase letter, a number and a symbol. The service hashes it with PBKDF2-SHA256 and each user's salt and compares in constant time. On a match, it generates an `OTP_LENGTH` (6) digit code, replaces any earlier code of that user with its SHA-256 hash with an expiry of `OTP_TTL_MINUTES` (10), and emails the code through Nodemailer to `santoshnepal441@gmail.com` and `ishannepal00001@gmail.com` (`OTP_RECIPIENTS`; empty falls back to the seeded user's email). The mail is in the app's colours, with the code large and selectable in one tap. When the request's `Origin` is one of `FRONTEND_ORIGINS`, it also has a **Sign in with this code** button that opens `<origin>/auth#code=<code>`; the sign-in page fills the code in from the fragment (never sent to a server) and wipes it from the address bar.
+2. **`POST /api/v1/auth/login`** with `{ code }`. The service looks up the hashed code, checks it hasn't expired, and signs an `HS256` JWT with `{ sub, name }` valid for `JWT_TTL_DAYS` (7). A wrong code counts against the live code, which is deleted after `OTP_MAX_ATTEMPTS` (5) wrong tries, so a new one needs the password again. A right code is deleted only after the token is signed. The response sets the `bhandar_token` cookie (`HttpOnly`, `Secure`, `SameSite=None`, though the frontend reaches the Worker through a same-origin proxy) and also returns the token in the body for clients without cookies.
 3. **Protected routes** run `isUser`, which returns `401 Not logged in` with no cookie and `401 Invalid or expired session` for a bad or expired token.
 4. **`POST /api/v1/auth/logout`** clears the cookie. The JWT isn't revoked; it's only removed from the browser.
 
@@ -358,7 +368,7 @@ type Job = QueuedJob | FinishedJob
 
 ## Frontend
 
-A React 19 single-page app built with Vite. In development, Vite proxies `/api` to the Worker on `127.0.0.1:8787`, so the browser sees one origin. In production the frontend is on another site, so it must send `credentials: 'include'` on `fetch` and `{ withCredentials: true }` on `EventSource`, and the Worker's `FRONTEND_ORIGINS` must include its URL.
+A React 19 single-page app built with Vite. `/api` is always same-origin and proxied to the deployed Worker at `https://bhandar-backend.ishannepal00001.workers.dev`: the Vite dev and preview servers do it locally (`vite.config.ts`), and the Pages Function in `functions/api/[[path]].ts` does it in production. That keeps the auth cookie first-party, which browsers that block third-party cookies (Brave, Safari, Firefox) require. `fetch` still sends `credentials: 'include'` and `EventSource` still sends `{ withCredentials: true }`; the Worker's `FRONTEND_ORIGINS` must include the Pages URL because the proxy passes the browser's `Origin` through.
 
 ### Routing
 

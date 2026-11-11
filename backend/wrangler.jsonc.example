@@ -17,6 +17,8 @@
     // Wrong codes a live code survives; after that it's deleted and a new one needs the password again.
     "OTP_MAX_ATTEMPTS": 5,
     "OTP_MAIL_SUBJECT": "Your Bhandar login code",
+    // Who gets the login code. Empty sends it to the seeded user's email only.
+    "OTP_RECIPIENTS": [],
     "PASSWORD_MIN_LENGTH": 8,
     "PASSWORD_SALT_BYTES": 16,
     // PBKDF2-SHA256 rounds for new password hashes (stored hashes keep their own count). Workers allows at most 100000,

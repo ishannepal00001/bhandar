@@ -1,5 +1,6 @@
 // auth: business logic
-// sendOtp(): A new code replaces any earlier one, so at most one code per user is ever valid.
+// sendOtp(): A new code replaces any earlier one, so at most one code per user is ever valid. The mail goes to
+//   OTP_RECIPIENTS when it's set (so the owner addresses are fixed), otherwise to the seeded user's email.
 // login(): A wrong code counts against the live code, which is deleted after OTP_MAX_ATTEMPTS, so a new one needs the
 //   password again. A right code is deleted last, so a login that fails after the lookup doesn't use it up.
 import { env } from 'cloudflare:workers'
@@ -39,7 +40,8 @@ export async function sendOtp(input: SendOtpRequest, frontend: string | null): P
   await fromModel(() => authModel.replaceOtp({ user_id: user.id, code_hash: codeHash, expires_at: expiresAt }))
 
   try {
-    await sendOtpMail(user.email, code, frontend)
+    const recipients = env.OTP_RECIPIENTS.length > 0 ? [...env.OTP_RECIPIENTS] : [user.email]
+    await sendOtpMail(recipients, code, frontend)
   } catch (err) {
     if (!(err instanceof AuthUtilsError)) throw err
     throw new AuthServiceError(err.message, 'MAIL_ERROR', { cause: err })
